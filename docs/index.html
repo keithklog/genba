@@ -5452,7 +5452,21 @@ const CloudSync = {
     });
     return this._gisLoading;
   },
+  /* GIS の失敗理由を、現場の人が次の行動に移れる言葉にする */
+  explainGisError(e){
+    const t = (e && (e.type || e.error)) || '';
+    if (/popup_failed_to_open|popup_blocked/.test(t))
+      return 'サインイン画面（ポップアップ）がブロックされました。ブラウザの設定でこのサイトのポップアップを許可して、もう一度押してください';
+    if (/popup_closed|user_cancel|access_denied/.test(t))
+      return 'サインインが途中で閉じられました。もう一度押して、アカウントを選んでください';
+    if (/invalid_client|unauthorized/.test(t))
+      return 'クライアントIDが正しくないか、JavaScript生成元にこのURLが登録されていません（Google Cloud側の設定を確認）';
+    return 'サインインできませんでした' + (t ? '（' + t + '）' : '');
+  },
   async signIn(interactive){
+    /* 重要：スクリプト読込をタップの中でやると、モバイルでは読込中に
+       「ユーザー操作」の有効期限が切れ、ポップアップが黙って塞がれる。
+       事前読込（warm）で、タップ時には開くだけの状態にしておく */
     await this.loadGis();
     return new Promise((res, rej) => {
       const tc = google.accounts.oauth2.initTokenClient({
@@ -5464,12 +5478,16 @@ const CloudSync = {
             this.tokenAt = now();
             this.lastError = '';
             res(true);
-          } else rej(new Error((t && t.error) || 'サインインできませんでした'));
-        }
+          } else rej(new Error(this.explainGisError(t) ));
+        },
+        /* これが無いと、ポップアップブロック等の失敗が「無言」になる */
+        error_callback: (e) => rej(new Error(this.explainGisError(e)))
       });
       tc.requestAccessToken({ prompt: interactive ? 'consent' : '' });
     });
   },
+  /* 設定画面を開いた時点で部品だけ先に読み込んでおく（失敗しても静かに） */
+  warm(){ this.loadGis().catch(() => {}); },
   async ensureToken(){
     if (this.token && now() - this.tokenAt < 50 * 60 * 1000) return this.token;
     await this.signIn(false).catch(async () => { await this.signIn(true); });
@@ -5743,7 +5761,14 @@ const CloudSync = {
     const c = this.cfg();
     if (clientId) c.client_id = clientId.trim();
     if (!c.client_id) { toast('クライアントIDを入れてください（ウェブ アプリケーション用）'); return false; }
-    await this.signIn(true);
+    try {
+      await this.signIn(true);
+    } catch(e){
+      this.lastError = e.message;
+      toast(e.message, { ms: 7000 });
+      this.renderStatus();
+      return false;
+    }
     c.enabled = true;
     await this.ensureFolder();
     Store.scheduleSave();
@@ -10799,6 +10824,7 @@ const Settings = {
     sec('端末間の同期');
     const cs = (typeof CloudSync !== 'undefined') ? CloudSync : null;
     if (cs){
+      cs.warm();          /* タップ前に部品を読み込む。モバイルのポップアップ対策 */
       const stt = cs.status();
       b.appendChild(el('div', { class: 'row' }, [
         el('div', { class: 'grow' }, [
@@ -10816,12 +10842,16 @@ const Settings = {
         b.appendChild(fld);
         const btnGo = el('button', { class: 'btn pri', style: 'margin:12px 16px;width:calc(100% - 32px)',
           text: 'Googleでサインインして同期を開始' });
-        btnGo.addEventListener('click', () => cs.enable(inp.value).then(() => this.render()));
+        btnGo.addEventListener('click', () => cs.enable(inp.value)
+          .then(() => this.render())
+          .catch(e => toast('サインインできません：' + e.message, { ms: 7000 })));
         b.appendChild(btnGo);
       } else if (!cs.cfg().enabled){
         const btnGo = el('button', { class: 'btn pri', style: 'margin:12px 16px;width:calc(100% - 32px)',
           text: 'Googleでサインインして同期を開始' });
-        btnGo.addEventListener('click', () => cs.enable().then(() => this.render()));
+        btnGo.addEventListener('click', () => cs.enable()
+          .then(() => this.render())
+          .catch(e => toast('サインインできません：' + e.message, { ms: 7000 })));
         b.appendChild(btnGo);
         b.appendChild(el('div', { class: 'hint',
           text: '自分のGoogleアカウントでサインインします。管理者から「GENBA-SYNC」フォルダの共有が届いていることを確認してください。' }));
@@ -13907,6 +13937,7 @@ const Admin = {
     /* ---- 端末間の同期（管理者はPCで作業するので、コンソールに置くのが本筋） ---- */
     const cs = (typeof CloudSync !== 'undefined') ? CloudSync : null;
     if (cs){
+      cs.warm();          /* タップ前に部品を読み込む（ポップアップブロック対策） */
       const stt = cs.status();
       const rows = [];
       rows.push(el('div', { class: 'kv2' }, [
@@ -13921,7 +13952,9 @@ const Admin = {
         inp.placeholder = '○○.apps.googleusercontent.com（ウェブ用クライアントID）';
         pad.appendChild(this.field('クライアントID（ウェブ アプリケーション用）', inp));
         pad.appendChild(this.btn('Googleでサインインして同期を開始',
-          () => cs.enable(inp.value).then(ok => { if (ok) this.render(); }), 'pri'));
+          () => cs.enable(inp.value)
+            .then(ok => { if (ok) this.render(); })
+            .catch(e => toast('サインインできません：' + e.message, { ms: 7000 })), 'pri'));
         pad.appendChild(el('div', { class: 'muted', style: 'font-size:12px;margin-top:10px;line-height:1.8',
           text: '開始するとDriveに「' + cs.FOLDER + '」フォルダが作られます。利用者のGoogleアカウントに'
               + 'このフォルダを「編集者」で共有すると、各端末は設定画面からサインインするだけで参加できます。'
