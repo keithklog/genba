@@ -4210,6 +4210,14 @@ const Projects = {
     State.projects.push(pj);
     Audit.log('project.create', pj.name, pj.code);
     Sync.markDirty('project.create');
+    /* 同期にサインイン済みなら、Drive の現場フォルダもこの場で作る。
+       「現場を作ったのに Drive に何もできない」が実際に起きたための直結 */
+    if (typeof DriveStore !== 'undefined' && DriveStore.ready()){
+      DriveStore.ensureProject(pj)
+        .then(() => toast('Driveに「GENBA / ' + pj.name + '」を作成しました'))
+        .catch(e => { console.warn('Driveフォルダ作成', e);
+          toast('Driveのフォルダ作成に失敗しました（管理コンソールの「Driveに反映」で作り直せます）'); });
+    }
     return pj;
   },
   update(id, patch){
@@ -4220,6 +4228,9 @@ const Projects = {
     pj.updated_at = now();          /* 端末間同期の「新しい方が勝つ」判定に使う */
     Audit.log('project.update', pj.name, Object.keys(patch).join(','));
     Sync.markDirty('project.update');
+    /* 現場名が変わったら Drive のフォルダ名も追従させる（別フォルダを作らない） */
+    if (patch.name && typeof DriveStore !== 'undefined' && DriveStore.ready())
+      DriveStore.ensureProject(pj).catch(e => console.warn('Driveフォルダ改名', e));
     return true;
   },
   archive(id, on){
@@ -4742,9 +4753,20 @@ const DriveSync = {
       }))
     };
   },
-  /* 書き出す。Drive連携ツールの「見張り」がこれを拾ってフォルダを揃える */
+  /* 書き出す。同期にサインイン済みならアプリが直接フォルダを作る。
+     そうでなければ従来どおり定義ファイルを出し、bat の見張りに任せる */
   export(){
     const p = this.payload();
+    if (typeof DriveStore !== 'undefined' && DriveStore.ready()){
+      toast('Driveに現場フォルダを直接作成しています…');
+      DriveStore.reflectAll()
+        .then(r => {
+          Audit.log('drive.sync', r.total + '件の現場', 'Driveへ直接反映（作成 ' + r.created + '件）');
+          toast('Driveへの反映が完了しました（現場 ' + r.total + '件・新規フォルダ ' + r.created + '件）', { ms: 4200 });
+        })
+        .catch(e => toast('Driveへの反映に失敗：' + e.message, { ms: 5200 }));
+      return p;
+    }
     download(this.FILE, JSON.stringify(p, null, 2), 'application/json');
     Audit.log('drive.sync', p.projects.length + '件の現場', 'Driveへ反映（フォルダ作成・改名）');
     toast('現場 ' + p.projects.length + '件をDriveに反映します（Drive連携の画面が受け取ります）', { ms: 4200 });
@@ -4857,37 +4879,60 @@ Object.assign(DriveSync, {
     return out;
   },
 
-  /* 1件出す。ブラウザの連続ダウンロードで取りこぼさないよう間隔をあける */
-  async out(name, bytes, mime){
+  /* このファイルが属する現場を特定する。
+     出力先の振り分けを「いま開いている現場」に頼ると、別の現場の
+     ファイルが混ざる（実際に起きた）。所属から引くのが唯一確実 */
+  projectOfDrawing(d){
+    return State.projects.find(p => p.drawings.indexOf(d) >= 0) || null;
+  },
+  projectOfDoc(doc){
+    return State.projects.find(p => (p.documents || []).indexOf(doc) >= 0) || null;
+  },
+  projectOfPhoto(id){
+    return State.projects.find(p => this.photoIdsOf(p).indexOf(id) >= 0) || null;
+  },
+
+  /* 1件出す。同期にサインイン済みなら Drive の正しい現場・棚へ直接置く。
+     そうでなければダウンロードに落とし、bat の見張り（予備経路）に任せる */
+  async out(name, bytes, mime, pj, shelf){
+    if (pj && shelf && typeof DriveStore !== 'undefined' && DriveStore.ready()){
+      try {
+        await DriveStore.put(pj, shelf, name, bytes, mime);
+        return;
+      } catch(e){ console.warn('Drive直接保存に失敗、ダウンロードに切替', name, e); }
+    }
     download(name, new Blob([bytes], { type: mime || 'application/octet-stream' }), null, true);
     await new Promise(r => setTimeout(r, 350));
   },
 
   /* 図面1枚・書類1改訂・写真1枚を、その場で保存先に出す（自動出力の入口） */
-  async pushDrawing(d, force){
+  async pushDrawing(d, force, pjHint){
     const key = 'dw:' + d.id + ':' + ((d.revisions || []).length || 1);
     if (!force && this.isSent(key)) return 0;
     const f = await this.fileOfDrawing(d);
     if (!f) return 0;
-    await this.out(this.nameOfDrawing(d, f), f.bytes, f.mime);
+    await this.out(this.nameOfDrawing(d, f), f.bytes, f.mime,
+      pjHint || this.projectOfDrawing(d), '01_図面');
     this.markSent(key);
     return 1;
   },
-  async pushDocRev(doc, rev, force){
+  async pushDocRev(doc, rev, force, pjHint){
     const key = 'doc:' + doc.id + ':' + rev.rev;
     if (!force && this.isSent(key)) return 0;
     const f = await this.fileOfDocRev(rev);
     if (!f) return 0;
-    await this.out(this.nameOfDocRev(doc, rev, f), f.bytes, f.mime);
+    await this.out(this.nameOfDocRev(doc, rev, f), f.bytes, f.mime,
+      pjHint || this.projectOfDoc(doc), '03_書類');
     this.markSent(key);
     return 1;
   },
-  async pushPhoto(id, force){
+  async pushPhoto(id, force, pjHint){
     const key = 'ph:' + id;
     if (!force && this.isSent(key)) return 0;
     const list = this.filesOfPhoto(id);
     if (!list.length) return 0;
-    for (const f of list) await this.out(f.name, f.bytes, f.mime);
+    const pj = pjHint || this.projectOfPhoto(id);
+    for (const f of list) await this.out(f.name, f.bytes, f.mime, pj, '02_写真');
     this.markSent(key);
     return list.length;
   },
@@ -4937,19 +4982,19 @@ Object.assign(DriveSync, {
     const sheets = pj.drawings.filter(d => !d.doc_id);
     for (const d of sheets){
       on('図面', d.name);
-      try { n += await this.pushDrawing(d, force); } catch(e){ console.warn(d.name, e); }
+      try { n += await this.pushDrawing(d, force, pj); } catch(e){ console.warn(d.name, e); }
     }
     for (const doc of (pj.documents || [])){
       for (const r of doc.revisions){
         if (!this.revHasBytes(r)) continue;
         on('書類', doc.no + ' Rev.' + r.rev);
-        try { n += await this.pushDocRev(doc, r, force); } catch(e){ console.warn(doc.no, e); }
+        try { n += await this.pushDocRev(doc, r, force, pj); } catch(e){ console.warn(doc.no, e); }
       }
     }
     if (o.photos !== false){
       for (const id of this.photoIdsOf(pj)){
         on('写真', id);
-        try { n += await this.pushPhoto(id, force); } catch(e){ console.warn(id, e); }
+        try { n += await this.pushPhoto(id, force, pj); } catch(e){ console.warn(id, e); }
       }
     }
     Audit.log('drive.push', pj.name, n + 'ファイルを保存先へ');
@@ -5724,6 +5769,144 @@ const CloudSync = {
 
   /* markDirty から呼ばれる。押すべきものがある印だけ付ける（送信は周期に任せる） */
   noteDirty(){ this.st().dirty++; }
+};
+
+/* ===================================================================
+ * DriveStore : アプリから Drive の現場フォルダへ「直接」書く
+ *
+ * なぜ要るか（実運用で起きた事故から）：
+ *   これまで帳票や原本は「ダウンロード → PCの見張り（bat）が拾って
+ *   Drive へ」という遠回りだった。この経路には2つの欠陥があった。
+ *     ・見張りはファイルがどの現場の物か知らない（「いまの現場」に
+ *       入れるだけ）→ 別の現場に保存される
+ *     ・bat を立ち上げていなければ何も起きない → 現場フォルダが
+ *       いつまでも作られない
+ *   同期用のウェブクライアント（drive スコープ）が入った今、
+ *   ブラウザ自身が正しい現場フォルダに直接置ける。ここがその実装。
+ *   bat の見張りは「同期を使わない環境の予備」に格下げする。
+ *
+ * 規則：
+ *   ・フォルダ構成は tools/drive-connect.mjs と同一（GENBA/現場/棚）
+ *   ・同じ名前があれば中身を差し替える（出し直しで2つ並ばない）
+ *   ・現場の改名はフォルダの改名として追従する（別フォルダを作らない）
+ * =================================================================== */
+const DriveStore = {
+  ROOT: 'GENBA',
+  SHELVES: ['01_図面', '02_写真', '03_書類', '04_帳票', '99_索引'],
+  FOLDER_MIME: 'application/vnd.google-apps.folder',
+
+  /* 同期にサインインできる状態か（＝直接書ける状態か） */
+  ready(){
+    return typeof CloudSync !== 'undefined' && CloudSync.enabled() && !!CloudSync.cfg().client_id;
+  },
+
+  /* Drive 上のフォルダIDの控え。端末ごとに保存する */
+  map(){
+    State.storage = State.storage || {};
+    if (!State.storage.driveFs) State.storage.driveFs = { rootId: null, projects: {} };
+    return State.storage.driveFs;
+  },
+
+  esc(s){ return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); },
+
+  async findChild(parentId, name, mime){
+    const q = "'" + parentId + "' in parents and trashed=false and name='" + this.esc(name) + "'"
+      + (mime ? " and mimeType='" + mime + "'" : '');
+    const r = await (await CloudSync.api(CloudSync.API + '/files?' + new URLSearchParams({
+      q, fields: 'files(id,name)', pageSize: '10',
+      includeItemsFromAllDrives: 'true', supportsAllDrives: 'true'
+    }))).json();
+    return (r.files && r.files[0]) || null;
+  },
+  async makeFolder(parentId, name){
+    const r = await (await CloudSync.api(CloudSync.API + '/files?fields=id&supportsAllDrives=true', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, mimeType: this.FOLDER_MIME, parents: [parentId] })
+    })).json();
+    return r.id;
+  },
+  async ensureChild(parentId, name){
+    const hit = await this.findChild(parentId, name, this.FOLDER_MIME);
+    return hit ? hit.id : await this.makeFolder(parentId, name);
+  },
+  async alive(id){
+    try {
+      const r = await (await CloudSync.api(CloudSync.API + '/files/' + id
+        + '?fields=id,trashed&supportsAllDrives=true')).json();
+      return r && !r.trashed;
+    } catch(_){ return false; }
+  },
+
+  async ensureRoot(){
+    const m = this.map();
+    if (m.rootId && await this.alive(m.rootId)) return m.rootId;
+    m.rootId = await this.ensureChild('root', this.ROOT);
+    Store.scheduleSave();
+    return m.rootId;
+  },
+
+  /* 現場フォルダと5つの棚を用意する。改名は追従、既存は再利用 */
+  async ensureProject(pj){
+    const m = this.map();
+    const rootId = await this.ensureRoot();
+    let e = m.projects[pj.id];
+    if (e && e.folderId && await this.alive(e.folderId)){
+      if (e.name !== pj.name){
+        await CloudSync.api(CloudSync.API + '/files/' + e.folderId + '?supportsAllDrives=true', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: pj.name })
+        });
+        e.name = pj.name;
+      }
+    } else {
+      e = m.projects[pj.id] = { folderId: await this.ensureChild(rootId, pj.name), name: pj.name, shelves: {} };
+    }
+    for (const s of this.SHELVES){
+      if (!e.shelves[s] || !(await this.alive(e.shelves[s])))
+        e.shelves[s] = await this.ensureChild(e.folderId, s);
+    }
+    Store.scheduleSave();
+    return e;
+  },
+
+  /* 1ファイル置く。同名があれば中身を差し替える */
+  async put(pj, shelf, name, data, mime){
+    const e = await this.ensureProject(pj);
+    const parent = e.shelves[shelf] || e.shelves['99_索引'];
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime || 'application/octet-stream' });
+    const dup = await this.findChild(parent, name, null);
+    if (dup){
+      await CloudSync.api(CloudSync.UP + '/files/' + dup.id + '?uploadType=media&supportsAllDrives=true', {
+        method: 'PATCH', headers: { 'Content-Type': blob.type }, body: blob
+      });
+      return { id: dup.id, replaced: true };
+    }
+    const boundary = 'genba' + Math.random().toString(36).slice(2);
+    const body = new Blob([
+      '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'
+        + JSON.stringify({ name, parents: [parent] })
+        + '\r\n--' + boundary + '\r\nContent-Type: ' + blob.type + '\r\n\r\n',
+      blob,
+      '\r\n--' + boundary + '--'
+    ]);
+    const r = await (await CloudSync.api(
+      CloudSync.UP + '/files?uploadType=multipart&fields=id&supportsAllDrives=true', {
+        method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body
+      })).json();
+    return { id: r.id, replaced: false };
+  },
+
+  /* 全現場のフォルダを揃える（管理コンソール「Driveに反映」の直接版） */
+  async reflectAll(onProgress){
+    let created = 0;
+    for (const p of State.projects){
+      if (onProgress) onProgress(p.name);
+      const had = this.map().projects[p.id];
+      await this.ensureProject(p);
+      if (!had) created++;
+    }
+    return { total: State.projects.length, created };
+  }
 };
 /* ===================================================================
  * p45_pdf : PDF エンジン（複数ページの表示と書き込み）
@@ -8754,6 +8937,24 @@ function reportTemplate(id, pj){
 }
 
 /* ---------- 帳票の見出し（工事名などの共通欄） ---------- */
+/* 帳票のファイル名。現場名を必ず入れる。
+   ① 人がフォルダ外で見ても、どの現場の帳票か分かる
+   ② bat の見張り（予備経路）が名前から現場を判別して正しく振り分けられる */
+function reportFileName(doc, ext){
+  const pjName = doc.project ? DriveSync.safe(doc.project.name) : '';
+  return doc.title + (pjName ? '_' + pjName : '') + '_' + isoDate(now()) + ext;
+}
+
+/* 帳票を保存先へ。同期にサインイン済みなら Drive の
+   「その現場 / 04_帳票」へ直接置く（bat 不要・誤配なし） */
+function deliverReport(doc, name, blob){
+  const pj = doc.project;
+  if (!pj || typeof DriveStore === 'undefined' || !DriveStore.ready()) return;
+  DriveStore.put(pj, '04_帳票', name, blob)
+    .then(r => toast('Driveの「' + pj.name + ' / 04_帳票」に' + (r.replaced ? '差し替えました' : '保存しました')))
+    .catch(e => toast('Driveへの保存に失敗（ダウンロード分は手元にあります）：' + e.message, { ms: 5200 }));
+}
+
 function reportHeader(pj, extra){
   const org = State.org || {};
   const rows = [
@@ -8825,6 +9026,14 @@ const ReportData = {
   },
 
   build(tplId, scope){
+    const doc = this._build(tplId, scope);
+    /* どの現場の帳票かをファイル自身が知っている状態にする。
+       これが無いと、保存先への振り分けを「いまの現場」に頼ることになり
+       別の現場に入る（実際に起きた） */
+    if (doc) doc.project = P.project();
+    return doc;
+  },
+  _build(tplId, scope){
     const pj = P.project();
     const tpl = reportTemplate(tplId, pj);
     const s = scope || {};
@@ -9037,9 +9246,11 @@ const ReportXlsx = {
 
   async run(doc){
     const bytes = doc.kind === 'photo' ? await this.photo(doc) : this.table(doc);
-    const name = doc.title + '_' + isoDate(now()) + '.xlsx';
-    download(name, new Blob([bytes], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const name = reportFileName(doc, '.xlsx');
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    download(name, blob);
+    deliverReport(doc, name, blob);
     Audit.log('report.xlsx', doc.title, (doc.photos ? doc.photos.length + '枚' : doc.rows.length + '行'));
     return name;
   }
@@ -9254,8 +9465,10 @@ const ReportPdf = {
     const pages = doc.kind === 'photo' ? await this.photoPages(doc) : this.tablePages(doc);
     if (!pages.length){ toast('出力できる内容がありません'); return null; }
     const bytes = PDFOut.build(pages, { title: doc.title });
-    const name = doc.title + '_' + isoDate(now()) + '.pdf';
-    download(name, new Blob([bytes], { type: 'application/pdf' }));
+    const name = reportFileName(doc, '.pdf');
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    download(name, blob);
+    deliverReport(doc, name, blob);
     Audit.log('report.pdf', doc.title, pages.length + 'ページ');
     return name;
   }
@@ -9702,10 +9915,19 @@ const MarkupPdf = {
       if (lp) pages.push(lp);
     }
     const bytes = PDFOut.build(pages, { title: dw.name });
-    const name = dw.name + '_マークアップ_' + isoDate(now()) + '.pdf';
+    /* 現場名を名前に入れる：人にも、名前で振り分ける見張り（予備経路）にも効く */
+    const pj = DriveSync.projectOfDrawing(dw);
+    const name = dw.name + '_マークアップ_'
+      + (pj ? DriveSync.safe(pj.name) + '_' : '') + isoDate(now()) + '.pdf';
     /* 保存先へ直接送りたい場合は、ダウンロードせずバイト列だけ返す */
     if (o.returnBytes) return { name, bytes };
-    download(name, new Blob([bytes], { type: 'application/pdf' }));
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    download(name, blob);
+    if (pj && typeof DriveStore !== 'undefined' && DriveStore.ready()){
+      DriveStore.put(pj, '04_帳票', name, blob)
+        .then(() => toast('Driveの「' + pj.name + ' / 04_帳票」に保存しました'))
+        .catch(e => toast('Driveへの保存に失敗（ダウンロード分は手元にあります）：' + e.message, { ms: 5200 }));
+    }
     Audit.log('report.markup', dw.name, pages.length + 'ページ');
     return name;
   }
@@ -14984,7 +15206,7 @@ window.__app = {
   duplicateAsNewObject, statusLabel,
   /* 管理・権限・横断機能 */
   Perm, PERMS, ROLE_PERMS, Audit, Admin, Projects, Folders, Drawings, Members, Vendors,
-  Search, Alerts, MissingShot, DataIO, DriveSync, SeedIO, CloudSync, SCHEMA_VERSION,
+  Search, Alerts, MissingShot, DataIO, DriveSync, SeedIO, CloudSync, DriveStore, reportFileName, SCHEMA_VERSION,
   migrateForTest: migrate, fmtLen, ICON_PX, Sheets, icon, decorateIcons, refreshAlertBadge,
   confirmSheet, pickImageFile, pickDrawingFile, Share, SHARE_EXPIRY, Layout, Guide, Contrast,
   /* PDF（複数ページ） */

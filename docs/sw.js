@@ -1,5 +1,5 @@
 /* GENBA Service Worker（自動生成。手で編集しない）
- * 版: 0d7ed9deb6  … index.html の内容ハッシュ。中身が変わればキャッシュ名ごと変わる
+ * 版: 43cacbecf3  … index.html の内容ハッシュ。中身が変わればキャッシュ名ごと変わる
  *
  * 方針：
  *   ・アプリの部品は「キャッシュ優先」。現場は電波が無いのが普通なので、
@@ -7,7 +7,7 @@
  *   ・裏で新しい版を取りに行き、あればページへ知らせる（押しつけの自動更新はしない。
  *     図面に書き込んでいる最中に画面が勝手に変わるのが最悪だから）
  */
-const CACHE = 'genba-0d7ed9deb6';
+const CACHE = 'genba-43cacbecf3';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icon-192.png', './icon-512.png', './icon-180.png', './icon.svg'];
 
