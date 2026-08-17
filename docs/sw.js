@@ -1,5 +1,5 @@
 /* GENBA Service Worker（自動生成。手で編集しない）
- * 版: 848ce3d7f5  … index.html の内容ハッシュ。中身が変わればキャッシュ名ごと変わる
+ * 版: 0d7ed9deb6  … index.html の内容ハッシュ。中身が変わればキャッシュ名ごと変わる
  *
  * 方針：
  *   ・アプリの部品は「キャッシュ優先」。現場は電波が無いのが普通なので、
@@ -7,7 +7,7 @@
  *   ・裏で新しい版を取りに行き、あればページへ知らせる（押しつけの自動更新はしない。
  *     図面に書き込んでいる最中に画面が勝手に変わるのが最悪だから）
  */
-const CACHE = 'genba-848ce3d7f5';
+const CACHE = 'genba-0d7ed9deb6';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icon-192.png', './icon-512.png', './icon-180.png', './icon.svg'];
 
@@ -31,6 +31,22 @@ self.addEventListener('message', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  /* 配布データ（seed.json）だけはネットワーク優先。
+     キャッシュ優先にすると、管理者が新しい配布を置いても各端末に一生届かない */
+  if (url.pathname.endsWith('seed.json')){
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(e.request);
+        if (res && res.ok) (await caches.open(CACHE)).put('./seed.json', res.clone());
+        return res;
+      } catch (err) {
+        const hit = await caches.match('./seed.json');
+        if (hit) return hit;
+        throw err;
+      }
+    })());
+    return;
+  }
   e.respondWith((async () => {
     const hit = await caches.match(e.request, { ignoreSearch: true });
     if (hit){

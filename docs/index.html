@@ -3265,6 +3265,8 @@ const Store = {
       /* クラウド保存先の記録。これが消えると「増えたぶんだけ出す」が
          再起動のたびに全部出し直しになる */
       storage: State.storage || null,
+      seedApplied: State.seedApplied || null,
+      syncCfg: State.syncCfg || null,
       ui: { projectId: State.ui.projectId, drawingId: State.ui.drawingId, lastVendorId: State.ui.lastVendorId },
       lastOpen: Nav.lastOpen
     };
@@ -3289,6 +3291,8 @@ const Store = {
     State.dirty = new Set(s.dirty || []);
     State.pinnedProjects = new Set(s.pinned || []);
     if (s.storage) State.storage = s.storage;
+    State.seedApplied = s.seedApplied || null;
+    if (s.syncCfg) State.syncCfg = s.syncCfg;
     State.ui.projectId = s.ui.projectId; State.ui.drawingId = s.ui.drawingId;
     State.ui.lastVendorId = s.ui.lastVendorId || null;
     Nav.lastOpen = s.lastOpen || null;
@@ -4213,6 +4217,7 @@ const Projects = {
     const pj = State.projects.find(p => p.id === id);
     if (!pj) return false;
     Object.assign(pj, patch);
+    pj.updated_at = now();          /* 端末間同期の「新しい方が勝つ」判定に使う */
     Audit.log('project.update', pj.name, Object.keys(patch).join(','));
     Sync.markDirty('project.update');
     return true;
@@ -4222,6 +4227,7 @@ const Projects = {
     const pj = State.projects.find(p => p.id === id);
     if (!pj) return false;
     pj.archived = !!on;
+    pj.updated_at = now();
     Audit.log(on ? 'project.archive' : 'project.restore', pj.name, '');
     Sync.markDirty('project.archive');
     return true;
@@ -4957,6 +4963,181 @@ Object.defineProperty(DriveSync, 'auto', {
   configurable: true
 });
 
+
+/* ===================================================================
+ * 配布データ（seed）
+ *   端末間に同期サーバは無い。その代わり、管理者が用意した
+ *   「現場・図面・メンバー」の一式を1つのファイルにして docs/ に置くと、
+ *   全端末が次に開いたときに自動で取り込む。
+ *
+ *   規則（マージで壊さないための線引き）：
+ *     ・追加と更新だけ。端末側の何かを消すことは決してしない
+ *     ・図面の「書き込み（レイヤー）」と写真は各端末のもの。配布では触らない
+ *     ・同じ配布データを何度読んでも結果が変わらない（冪等）
+ * =================================================================== */
+const SeedIO = {
+  KEY_APPLIED: 'seedApplied',
+
+  /* 端末側の作業（レイヤー・写真）を配布物に混ぜない */
+  _stripped(){
+    const projects = JSON.parse(JSON.stringify(State.projects));
+    projects.forEach(p => {
+      p.drawings.forEach(d => { d.layers = []; });
+      (p.issues || []).forEach(i => { i.photos = []; });
+    });
+    return projects;
+  },
+
+  async build(){
+    const projects = this._stripped();
+    /* 図面PDFの原本も同梱する（無いと配布先で白紙になる） */
+    const pdfIds = new Set();
+    projects.forEach(p => {
+      p.drawings.forEach(d => { if (d.pdf && d.pdf.id) pdfIds.add(d.pdf.id); });
+      (p.documents || []).forEach(doc => doc.revisions.forEach(r => {
+        if (r.file && r.file.pdf && r.file.pdf.id) pdfIds.add(r.file.pdf.id);
+      }));
+    });
+    const pdfs = {};
+    if (typeof PdfStore !== 'undefined'){
+      for (const id of pdfIds){
+        const bytes = await PdfStore.bytes(id);
+        if (bytes){
+          let bin = '';
+          for (let i = 0; i < bytes.length; i += 0x8000)
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+          pdfs[id] = btoa(bin);
+        }
+      }
+    }
+    return {
+      type: 'genba.seed/v1',
+      at: new Date().toISOString(),
+      org: { name: State.org.name },
+      users: JSON.parse(JSON.stringify(State.users)),
+      vendors: JSON.parse(JSON.stringify(State.vendors)),
+      /* 端末間同期の設定も配る（クライアントIDだけ。鍵ではないので配ってよい） */
+      sync: (State.syncCfg && State.syncCfg.client_id)
+        ? { client_id: State.syncCfg.client_id } : null,
+      projects, pdfs
+    };
+  },
+
+  async export(){
+    toast('配布データを作成しています…');
+    const doc = await this.build();
+    const nPdf = Object.keys(doc.pdfs).length;
+    download('seed.json', JSON.stringify(doc), 'application/json');
+    Audit.log('seed.export', doc.projects.length + '現場',
+      'PDF ' + nPdf + '本を同梱。docs に置くと全端末に配布されます');
+    toast('seed.json を保存しました。GitHubの docs フォルダに入れると、全端末が次に開いたとき取り込みます', { ms: 6000 });
+    return doc;
+  },
+
+  /* 素朴で速いハッシュ。「前に取り込んだ配布データと同じか」の判定にだけ使う */
+  hash(text){
+    let h = 5381;
+    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+    return 'v' + h.toString(36) + ':' + text.length;
+  },
+
+  /* マージ本体。戻り値は画面に出すための集計 */
+  async apply(doc){
+    if (!doc || doc.type !== 'genba.seed/v1' || !Array.isArray(doc.projects))
+      return null;
+    const st = { pjAdded: 0, pjUpdated: 0, dwAdded: 0, dwUpdated: 0, userAdded: 0 };
+
+    (doc.users || []).forEach(u => {
+      if (!State.users.some(x => x.id === u.id)){ State.users.push(u); st.userAdded++; }
+    });
+    (doc.vendors || []).forEach(v => {
+      if (!State.vendors.some(x => x.id === v.id)) State.vendors.push(v);
+    });
+    if (doc.org && doc.org.name) State.org.name = doc.org.name;
+    if (doc.sync && doc.sync.client_id && typeof CloudSync !== 'undefined'){
+      CloudSync.cfg().client_id = doc.sync.client_id;
+    }
+
+    (doc.projects || []).forEach(sp => {
+      const local = State.projects.find(p => p.id === sp.id);
+      if (!local){
+        State.projects.push(sp);
+        st.pjAdded++;
+        return;
+      }
+      st.pjUpdated++;
+      ['name', 'code', 'client', 'address', 'start_date', 'end_date', 'archived', 'approval']
+        .forEach(k => { if (sp[k] !== undefined) local[k] = sp[k]; });
+      (sp.folders || []).forEach(f => {
+        const lf = local.folders.find(x => x.id === f.id);
+        if (lf) lf.name = f.name; else local.folders.push(f);
+      });
+      (sp.drawings || []).forEach(sd => {
+        const ld = local.drawings.find(x => x.id === sd.id);
+        if (!ld){
+          local.drawings.push(sd);           /* layers は配布時に空にしてある */
+          st.dwAdded++;
+          return;
+        }
+        /* 図面の中身は配布側を正とするが、書き込み（layers）は端末のまま残す */
+        ['name', 'number', 'folder_id', 'scale', 'paper_size', 'origin', 'published',
+         'image_uri', 'pdf', 'paper', 'geom', 'revisions', 'current_revision_id']
+          .forEach(k => { if (sd[k] !== undefined) ld[k] = sd[k]; });
+        st.dwUpdated++;
+      });
+      (sp.issues || []).forEach(si => {
+        if (!local.issues.some(x => x.id === si.id)) local.issues.push(si);
+      });
+      (sp.documents || []).forEach(sdoc => {
+        local.documents = local.documents || [];
+        if (!local.documents.some(x => x.id === sdoc.id)) local.documents.push(sdoc);
+      });
+    });
+
+    /* PDFの原本を保管庫へ（既にあれば触らない） */
+    if (doc.pdfs && typeof PdfStore !== 'undefined'){
+      for (const id of Object.keys(doc.pdfs)){
+        const had = await PdfStore.bytes(id);
+        if (had) continue;
+        const bin = atob(doc.pdfs[id]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        await PdfStore.put(id, bytes, id + '.pdf');
+      }
+    }
+    Sync.markDirty('seed.apply');
+    return st;
+  },
+
+  /* 起動時：配布データが更新されていたら取り込む（http(s) のときだけ） */
+  async checkAndApply(){
+    if (typeof location === 'undefined' || !location.protocol.startsWith('http')) return false;
+    let text = null;
+    try {
+      /* Service Worker はこのファイルだけネットワーク優先にしてある */
+      const res = await fetch('seed.json?ts=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return false;                    /* 置かれていない運用も正常 */
+      text = await res.text();
+    } catch (_){ return false; }
+    let doc = null;
+    try { doc = JSON.parse(text); } catch (_){ return false; }
+    if (!doc || doc.type !== 'genba.seed/v1') return false;
+    const h = this.hash(text);
+    if (State.seedApplied === h) return false;      /* 取り込み済み */
+    const st = await this.apply(doc);
+    if (!st) return false;
+    State.seedApplied = h;
+    Store.scheduleSave();
+    if (typeof Home !== 'undefined' && State.ui.screen === 's1') Home.render();
+    if (typeof DrawingList !== 'undefined' && State.ui.screen === 's2') DrawingList.render();
+    if (typeof Admin !== 'undefined' && Admin.render) try { Admin.render(); } catch(_){}
+    toast('管理者からの配布データを取り込みました（現場の追加 ' + st.pjAdded +
+      ' / 更新 ' + st.pjUpdated + '・図面の追加 ' + st.dwAdded + '）。あなたの書き込みは保持されています',
+      { ms: 6000 });
+    Dev.log('配布データ適用: ' + JSON.stringify(st));
+    return true;
+  }
+};
 /* ===================================================================
  * p30_sync : §4-3 同期状態 / §8 同期設計 / §10 オフラインキャッシュ
  *
@@ -4976,6 +5157,7 @@ const Sync = {
   markDirty(label){
     this.pendingOps++;
     Store.scheduleSave();
+    if (typeof CloudSync !== 'undefined') CloudSync.noteDirty();
     if (State.ui.offline){ this.setState('offline'); return; }
     this.setState('pending');
     clearTimeout(this.timer);
@@ -5153,6 +5335,395 @@ const Cache = {
     Dev.log('キャッシュ整理: タイルを削除 ' + (removed.join(', ') || 'なし') + '（注釈・未同期の写真原本は削除しない）');
     return removed;
   }
+};
+/* ===================================================================
+ * p32_cloudsync : Drive 共有フォルダ経由の端末間同期（双方向）
+ *
+ * 仕組み：
+ *   ・管理者が Drive に「GENBA-SYNC」フォルダを作り、利用者の
+ *     Googleアカウントに「編集者」で共有する（Driveの通常の共有）
+ *   ・各端末はブラウザから自分のGoogleアカウントでサインインし、
+ *     そのフォルダに「自分の作業」を書き、他人の分を読む
+ *   ・サーバは建てない。Drive が置き場、ブラウザが同期エンジン
+ *
+ * 競合を壊さないための3つの決め：
+ *   ① 書き込み（レイヤー）は所有者だけが正。
+ *      各端末は「自分のレイヤー」を丸ごと書き、他人のレイヤーは
+ *      その人のファイルの内容で丸ごと置き換える。
+ *      → 追加・編集・削除がそのまま伝わり、マージの規則が要らない
+ *   ② 現場・図面・指摘などの共有物は「新しい方が勝つ」（更新時刻で比較）
+ *   ③ 適用は冪等。同じファイルを何度読んでも結果は同じ
+ *
+ * スコープは drive（全体）を使う。drive.file だと「他人が作った共有
+ * ファイルが見えない」ため同期が成立しない。同意画面を「内部」にして
+ * ある限り、Googleの審査は不要（自組織のアカウントしか使えない）。
+ * =================================================================== */
+
+const CloudSync = {
+  FOLDER: 'GENBA-SYNC',
+  SCOPE: 'https://www.googleapis.com/auth/drive',
+  API: 'https://www.googleapis.com/drive/v3',
+  UP: 'https://www.googleapis.com/upload/drive/v3',
+  POLL_MS: 15000,
+  token: null,
+  tokenAt: 0,
+  timer: null,
+  busy: false,
+  lastError: '',
+  lastSyncAt: 0,
+
+  /* ---------- 設定（seed.json でも配れる） ---------- */
+  cfg(){
+    State.syncCfg = State.syncCfg || { client_id: '', folderId: null, enabled: false };
+    return State.syncCfg;
+  },
+  st(){
+    const s = (typeof DriveSync !== 'undefined' ? DriveSync.store() : (State.storage = State.storage || {}));
+    s.sync = s.sync || { applied: {}, deviceId: null, pdfUp: {}, dirty: 0, pushed: 0 };
+    if (!s.sync.deviceId) s.sync.deviceId = 'dev_' + Math.random().toString(36).slice(2, 8);
+    return s.sync;
+  },
+  enabled(){ return !!(this.cfg().enabled && this.cfg().client_id); },
+  status(){
+    if (!this.cfg().client_id) return { key: 'unconfigured', label: '未設定' };
+    if (!this.cfg().enabled) return { key: 'off', label: '停止中' };
+    if (!this.token) return { key: 'signedout', label: 'サインイン待ち' };
+    if (this.lastError) return { key: 'error', label: 'エラー: ' + this.lastError };
+    if (this.busy) return { key: 'syncing', label: '同期中…' };
+    return { key: 'on', label: '同期中（' + (this.lastSyncAt ? new Date(this.lastSyncAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '準備中') + '）' };
+  },
+
+  /* ---------- Google サインイン（ブラウザだけで完結・鍵ファイル不要） ---------- */
+  _gisLoading: null,
+  loadGis(){
+    if (window.google && window.google.accounts) return Promise.resolve();
+    if (this._gisLoading) return this._gisLoading;
+    this._gisLoading = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('Googleサインイン部品を読み込めません（オンラインで再試行）'));
+      document.head.appendChild(s);
+    });
+    return this._gisLoading;
+  },
+  async signIn(interactive){
+    await this.loadGis();
+    return new Promise((res, rej) => {
+      const tc = google.accounts.oauth2.initTokenClient({
+        client_id: this.cfg().client_id,
+        scope: this.SCOPE,
+        callback: (t) => {
+          if (t && t.access_token){
+            this.token = t.access_token;
+            this.tokenAt = now();
+            this.lastError = '';
+            res(true);
+          } else rej(new Error((t && t.error) || 'サインインできませんでした'));
+        }
+      });
+      tc.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+    });
+  },
+  async ensureToken(){
+    if (this.token && now() - this.tokenAt < 50 * 60 * 1000) return this.token;
+    await this.signIn(false).catch(async () => { await this.signIn(true); });
+    return this.token;
+  },
+
+  /* ---------- Drive ---------- */
+  async api(url, opt){
+    const t = await this.ensureToken();
+    const res = await fetch(url, Object.assign({}, opt, {
+      headers: Object.assign({ Authorization: 'Bearer ' + t }, (opt && opt.headers) || {})
+    }));
+    if (res.status === 401){ this.token = null; throw new Error('サインインが切れました'); }
+    if (!res.ok){
+      let m = res.status + '';
+      try { m = (await res.json()).error.message; } catch(_){}
+      throw new Error(m);
+    }
+    return res;
+  },
+  async findFolder(){
+    const q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + this.FOLDER + "'";
+    const r = await (await this.api(this.API + '/files?' + new URLSearchParams({
+      q, fields: 'files(id,name,capabilities/canEdit)',
+      includeItemsFromAllDrives: 'true', supportsAllDrives: 'true', corpora: 'allDrives'
+    }))).json();
+    return (r.files && r.files[0]) || null;
+  },
+  async ensureFolder(){
+    const c = this.cfg();
+    if (c.folderId){
+      try {
+        await this.api(this.API + '/files/' + c.folderId + '?fields=id&supportsAllDrives=true');
+        return c.folderId;
+      } catch(_){ c.folderId = null; }
+    }
+    const found = await this.findFolder();
+    if (found){ c.folderId = found.id; Store.scheduleSave(); return found.id; }
+    /* 無ければ作る（最初の1台＝管理者。あとで人に共有する） */
+    const made = await (await this.api(this.API + '/files?fields=id&supportsAllDrives=true', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: this.FOLDER, mimeType: 'application/vnd.google-apps.folder' })
+    })).json();
+    c.folderId = made.id; Store.scheduleSave();
+    return made.id;
+  },
+  async listSyncFiles(folderId){
+    const q = "'" + folderId + "' in parents and trashed=false and name contains 'sync-'";
+    const r = await (await this.api(this.API + '/files?' + new URLSearchParams({
+      q, fields: 'files(id,name,modifiedTime,size)', pageSize: '100',
+      includeItemsFromAllDrives: 'true', supportsAllDrives: 'true'
+    }))).json();
+    return r.files || [];
+  },
+  async readFile(id){
+    return (await this.api(this.API + '/files/' + id + '?alt=media&supportsAllDrives=true')).json();
+  },
+  async writeJson(folderId, name, obj, existingId){
+    const body = JSON.stringify(obj);
+    if (existingId){
+      await this.api(this.UP + '/files/' + existingId + '?uploadType=media&supportsAllDrives=true', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body
+      });
+      return existingId;
+    }
+    const boundary = 'genba' + Math.random().toString(36).slice(2);
+    const multi = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'
+      + JSON.stringify({ name, parents: [folderId] }) + '\r\n--' + boundary
+      + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + boundary + '--';
+    const r = await (await this.api(this.UP + '/files?uploadType=multipart&fields=id&supportsAllDrives=true', {
+      method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: multi
+    })).json();
+    return r.id;
+  },
+
+  /* ---------- 自分の作業を1つの荷物にする ---------- */
+  buildPayload(){
+    const me = State.me.id;
+    const projects = State.projects.map(p => ({
+      id: p.id, name: p.name, code: p.code, client: p.client, address: p.address,
+      start_date: p.start_date, end_date: p.end_date, archived: p.archived,
+      approval: p.approval, created_at: p.created_at,
+      updated_at: p.updated_at || p.created_at || 0,
+      folders: p.folders,
+      drawings: p.drawings.map(d => ({
+        id: d.id, name: d.name, number: d.number, folder_id: d.folder_id,
+        current_revision_id: d.current_revision_id, scale: d.scale, paper_size: d.paper_size,
+        origin: d.origin, published: d.published, image_uri: d.image_uri, pdf: d.pdf,
+        paper: d.paper, geom: d.geom, revisions: d.revisions, updated_at: d.updated_at,
+        doc_id: d.doc_id || null, doc_rev: d.doc_rev || null,
+        /* ①の決め：自分のレイヤーだけを運ぶ */
+        myLayers: d.layers.filter(l => l.owner_id === me)
+      })),
+      issues: p.issues,
+      documents: p.documents || []
+    }));
+    /* 自分のピンが参照する写真（表示用だけ。原本は各端末とDrive自動出力に残る） */
+    const photoIds = new Set();
+    State.projects.forEach(p => {
+      p.drawings.forEach(d => d.layers.forEach(l => {
+        if (l.owner_id !== me) return;
+        l.annotations.forEach(a => {
+          if (a.type === 'pin') (a.payload.photos || []).forEach(id => photoIds.add(id));
+        });
+      }));
+      p.issues.forEach(i => (i.photos || []).forEach(id => photoIds.add(id)));
+    });
+    const photos = {};
+    photoIds.forEach(id => {
+      const ph = PhotoStore.get(id);
+      if (ph) photos[id] = {
+        display_uri: ph.display_uri, sha256: ph.sha256, bytes: ph.bytes,
+        taken_at: ph.taken_at, taken_by: ph.taken_by, device: ph.device, board: ph.board
+      };
+    });
+    return {
+      type: 'genba.sync/v2', at: now(), user: me,
+      userName: (P.user(me) || {}).name || me,
+      device: this.st().deviceId,
+      org: { name: State.org.name },
+      users: State.users, vendors: State.vendors,
+      projects, photos
+    };
+  },
+
+  /* ---------- 他人の荷物を取り込む ---------- */
+  applyPayload(doc){
+    if (!doc || doc.type !== 'genba.sync/v2') return null;
+    const stats = { layers: 0, issues: 0, projects: 0, drawings: 0, photos: 0 };
+    const meDev = this.st().deviceId;
+    if (doc.device === meDev) return stats;          /* 自分の荷物は読まない */
+
+    (doc.users || []).forEach(u => { if (!State.users.some(x => x.id === u.id)) State.users.push(u); });
+    (doc.vendors || []).forEach(v => { if (!State.vendors.some(x => x.id === v.id)) State.vendors.push(v); });
+
+    (doc.projects || []).forEach(rp => {
+      let lp = State.projects.find(p => p.id === rp.id);
+      if (!lp){
+        lp = { id: rp.id, name: rp.name, code: rp.code, client: rp.client, address: rp.address,
+          start_date: rp.start_date, end_date: rp.end_date, archived: !!rp.archived,
+          approval: rp.approval, created_at: rp.created_at, updated_at: rp.updated_at,
+          folders: rp.folders || [], drawings: [], issues: [], documents: [] };
+        State.projects.push(lp);
+        stats.projects++;
+      } else if ((rp.updated_at || 0) > (lp.updated_at || lp.created_at || 0)){
+        /* ②の決め：共有物は新しい方が勝つ */
+        ['name', 'code', 'client', 'address', 'start_date', 'end_date', 'archived', 'approval']
+          .forEach(k => { if (rp[k] !== undefined) lp[k] = rp[k]; });
+        lp.updated_at = rp.updated_at;
+      }
+      (rp.folders || []).forEach(f => {
+        const lf = lp.folders.find(x => x.id === f.id);
+        if (lf) lf.name = f.name; else lp.folders.push(f);
+      });
+      (rp.drawings || []).forEach(rd => {
+        let ld = lp.drawings.find(x => x.id === rd.id);
+        if (!ld){
+          ld = Object.assign({}, rd, { layers: [], last_page: 0, downloaded: true });
+          delete ld.myLayers;
+          lp.drawings.push(ld);
+          stats.drawings++;
+        } else if ((rd.updated_at || 0) > (ld.updated_at || 0)){
+          ['name', 'number', 'folder_id', 'scale', 'paper_size', 'origin', 'published',
+           'image_uri', 'pdf', 'paper', 'geom', 'revisions', 'current_revision_id', 'updated_at']
+            .forEach(k => { if (rd[k] !== undefined) ld[k] = rd[k]; });
+        }
+        /* ①の決め：相手のレイヤーは相手の版で丸ごと置き換える */
+        (rd.myLayers || []).forEach(rl => {
+          const i = ld.layers.findIndex(x => x.id === rl.id);
+          if (i >= 0) ld.layers[i] = rl; else ld.layers.push(rl);
+          stats.layers++;
+        });
+      });
+      const issueTime = (i) => (i.history && i.history.length)
+        ? i.history[i.history.length - 1].at : (i.created_at || 0);
+      (rp.issues || []).forEach(ri => {
+        const j = lp.issues.findIndex(x => x.id === ri.id);
+        if (j < 0){ lp.issues.push(ri); stats.issues++; }
+        else if (issueTime(ri) > issueTime(lp.issues[j])){ lp.issues[j] = ri; stats.issues++; }
+      });
+      const docTime = (d) => (d.history && d.history.length) ? d.history[d.history.length - 1].at : 0;
+      (rp.documents || []).forEach(rdoc => {
+        lp.documents = lp.documents || [];
+        const j = lp.documents.findIndex(x => x.id === rdoc.id);
+        if (j < 0) lp.documents.push(rdoc);
+        else if (docTime(rdoc) > docTime(lp.documents[j])) lp.documents[j] = rdoc;
+      });
+    });
+
+    Object.keys(doc.photos || {}).forEach(id => {
+      if (PhotoStore.get(id)) return;
+      const ph = doc.photos[id];
+      PhotoStore.map[id] = {
+        id, original_uri: ph.display_uri, display_uri: ph.display_uri,
+        sha256: ph.sha256, bytes: ph.bytes, board: ph.board || null,
+        taken_at: ph.taken_at, taken_by: ph.taken_by, device: ph.device,
+        synced_display_only: true            /* 原本は撮った端末とDrive自動出力にある */
+      };
+      stats.photos++;
+    });
+    return stats;
+  },
+
+  /* ---------- 同期の1周（押し・引き） ---------- */
+  async syncOnce(reason){
+    if (!this.enabled() || this.busy) return null;
+    this.busy = true;
+    this.renderStatus();
+    try {
+      const folderId = await this.ensureFolder();
+      const sync = this.st();
+
+      /* 押す：前回から変更があるときだけ */
+      if (sync.dirty !== sync.pushed || reason === 'force'){
+        const name = 'sync-' + sync.deviceId + '.json';
+        const mine = (await this.listSyncFiles(folderId)).find(f => f.name === name);
+        const fileId = await this.writeJson(folderId, name, this.buildPayload(), mine && mine.id);
+        sync.pushed = sync.dirty;
+        sync.fileId = fileId;
+      }
+
+      /* 引く：更新されたファイルだけ */
+      const files = await this.listSyncFiles(folderId);
+      let applied = 0;
+      for (const f of files){
+        if (f.name === 'sync-' + sync.deviceId + '.json') continue;
+        if (sync.applied[f.id] === f.modifiedTime) continue;
+        const doc = await this.readFile(f.id);
+        const stt = this.applyPayload(doc);
+        sync.applied[f.id] = f.modifiedTime;
+        if (stt && (stt.layers || stt.issues || stt.projects || stt.drawings || stt.photos)) applied++;
+      }
+      this.lastSyncAt = now();
+      this.lastError = '';
+      if (applied){
+        Store.scheduleSave();
+        this.refreshUI();
+      }
+      return applied;
+    } catch (e){
+      this.lastError = e.message || String(e);
+      Dev.log('同期エラー: ' + this.lastError);
+      return null;
+    } finally {
+      this.busy = false;
+      this.renderStatus();
+    }
+  },
+
+  refreshUI(){
+    try {
+      if (State.ui.screen === 's1' && typeof Home !== 'undefined') Home.render();
+      if (State.ui.screen === 's2' && typeof DrawingList !== 'undefined') DrawingList.render();
+      if (State.ui.screen === 's3' && Viewer.drawing){
+        Viewer.renderAnnotations(); Viewer.renderPins();
+      }
+      if (typeof Issues !== 'undefined' && State.ui.screen === 's7') Issues.render();
+      if (typeof Admin !== 'undefined' && Admin.render) Admin.render();
+    } catch(_){}
+  },
+  renderStatus(){
+    const n = document.getElementById('syncCloudState');
+    if (n) n.textContent = this.status().label;
+  },
+
+  /* ---------- 開始・停止 ---------- */
+  async enable(clientId){
+    const c = this.cfg();
+    if (clientId) c.client_id = clientId.trim();
+    if (!c.client_id) { toast('クライアントIDを入れてください（ウェブ アプリケーション用）'); return false; }
+    await this.signIn(true);
+    c.enabled = true;
+    await this.ensureFolder();
+    Store.scheduleSave();
+    this.start();
+    await this.syncOnce('force');
+    toast('端末間の同期を開始しました。共有フォルダ「' + this.FOLDER + '」を利用者のアカウントに共有してください', { ms: 6000 });
+    Audit.log('sync.enable', this.FOLDER, 'Drive共有フォルダ同期を開始');
+    return true;
+  },
+  disable(){
+    this.cfg().enabled = false;
+    this.stop();
+    Store.scheduleSave();
+    toast('端末間の同期を止めました');
+  },
+  start(){
+    if (this.timer || !this.enabled()) return;
+    this.timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) this.syncOnce('poll');
+    }, this.POLL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.enabled()) this.syncOnce('visible');
+    });
+  },
+  stop(){ clearInterval(this.timer); this.timer = null; },
+
+  /* markDirty から呼ばれる。押すべきものがある印だけ付ける（送信は周期に任せる） */
+  noteDirty(){ this.st().dirty++; }
 };
 /* ===================================================================
  * p45_pdf : PDF エンジン（複数ページの表示と書き込み）
@@ -9999,6 +10570,52 @@ const Settings = {
         el('div', { class: 't2', text: ROLES[State.me.role].label })])
     ]));
 
+    /* ---- 端末間の同期（Drive共有フォルダ） ---- */
+    sec('端末間の同期');
+    const cs = (typeof CloudSync !== 'undefined') ? CloudSync : null;
+    if (cs){
+      const stt = cs.status();
+      b.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'grow' }, [
+          el('div', { class: 't1', text: 'みんなの書き込みを共有' }),
+          el('div', { class: 't2', text: '状態：' }),
+        ]),
+        el('span', { id: 'syncCloudState', class: 'badge' + (stt.key === 'on' ? ' dl' : stt.key === 'error' ? ' warn' : ''),
+          text: stt.label })
+      ]));
+      if (!cs.cfg().client_id){
+        const inp = el('input', { type: 'text', placeholder: '管理者から届いたクライアントID',
+          style: 'width:100%;min-height:48px;border:1px solid var(--line-ctl);border-radius:12px;padding:10px 12px' });
+        const fld = el('div', { class: 'field' }, [
+          el('label', { text: 'クライアントID（通常は配布データで自動設定されます）' }), inp ]);
+        b.appendChild(fld);
+        const btnGo = el('button', { class: 'btn pri', style: 'margin:12px 16px;width:calc(100% - 32px)',
+          text: 'Googleでサインインして同期を開始' });
+        btnGo.addEventListener('click', () => cs.enable(inp.value).then(() => this.render()));
+        b.appendChild(btnGo);
+      } else if (!cs.cfg().enabled){
+        const btnGo = el('button', { class: 'btn pri', style: 'margin:12px 16px;width:calc(100% - 32px)',
+          text: 'Googleでサインインして同期を開始' });
+        btnGo.addEventListener('click', () => cs.enable().then(() => this.render()));
+        b.appendChild(btnGo);
+        b.appendChild(el('div', { class: 'hint',
+          text: '自分のGoogleアカウントでサインインします。管理者から「GENBA-SYNC」フォルダの共有が届いていることを確認してください。' }));
+      } else {
+        const rowBtns = el('div', { style: 'display:flex;gap:8px;padding:12px 16px' }, []);
+        const bNow = el('button', { class: 'btn wide', text: '今すぐ同期' });
+        bNow.addEventListener('click', () => cs.syncOnce('force').then(n => {
+          toast(n === null ? '同期できませんでした（' + cs.lastError + '）'
+            : 'ほかの端末の作業を取り込みました'); this.render();
+        }));
+        const bOff = el('button', { class: 'btn gh', text: '停止' });
+        bOff.addEventListener('click', () => { cs.disable(); this.render(); });
+        rowBtns.appendChild(bNow); rowBtns.appendChild(bOff);
+        b.appendChild(rowBtns);
+        b.appendChild(el('div', { class: 'hint',
+          text: '約15秒ごとに、みんなの書き込み・写真・指摘が行き来します。自分の線は自分だけが動かせるので、他人の作業を壊すことはありません。' }));
+      }
+    }
+
     sec('表示と撮影');
     const toggleRow = (title, desc, get, set) => {
       const sw = el('div', { class: 'sw-toggle' + (get() ? ' on' : '') }, [el('i')]);
@@ -11791,6 +12408,7 @@ const Admin = {
     const canCreate = Perm.can('project.create');
     b.appendChild(this.sec('現場一覧', [
       canCreate ? this.btn('＋ 現場を作成', () => this.projectDialog(null), 'pri') : null,
+      this.btn('端末に配布', () => this.seedDialog(), 'sm'),
       this.btn('Driveに反映', () => this.driveSyncDialog(), 'sm')
     ].filter(Boolean), [
       canCreate ? el('span') : el('div', { class: 'adm-permnote',
@@ -12851,6 +13469,27 @@ const Admin = {
     ], [
       this.btn('閉じる', () => this.closeDialog()),
       this.btn('反映する', () => { DriveSync.export(); this.closeDialog(); }, 'pri')
+    ]);
+  },
+
+  /* 全端末への配布。データは端末の中にあり同期サーバは無い、という前提を
+     ここで正直に説明してから、seed.json を書き出させる */
+  seedDialog(){
+    this.dialog('ほかの端末に現場を配る', [
+      el('div', { class: 'muted', style: 'font-size:13px;line-height:1.95;margin-bottom:12px', html:
+        'このアプリのデータは<b>各端末の中</b>にあり、端末どうしは自動では同期しません。<br>' +
+        'ここで書き出す <b>seed.json</b> を、アプリを公開している GitHub の <b>docs</b> フォルダに' +
+        '入れると（index.html と同じ場所・上書きアップロード）、<b>全端末が次に開いたときに自動で取り込みます</b>。' }),
+      el('div', { class: 'kv2', style: 'margin-bottom:12px' }, [
+        el('span', { text: '配られるもの' }), el('b', { text: '現場・図面（PDF込み）・フォルダ・メンバー・業者・書類台帳' }),
+        el('span', { text: '配られないもの' }), el('b', { text: '各端末の書き込み・写真（それぞれの端末の作業なので）' })
+      ]),
+      el('div', { class: 'hint', text:
+        '取り込みは追加と更新だけ。端末側のデータを消すことはありません。' +
+        '現場からの成果の回収は、Drive自動出力と帳票で行います。' })
+    ], [
+      this.btn('閉じる', () => this.closeDialog()),
+      this.btn('seed.json を書き出す', async () => { this.closeDialog(); await SeedIO.export(); }, 'pri')
     ]);
   },
 
@@ -14326,6 +14965,13 @@ async function boot(){
   Guide.maybeShow();                       /* 初回だけ、3つの使い方を出す */
   /* 外部ファイルが無くてもPDFを試せるよう、書類1件に確認用PDFを添付する */
   setTimeout(() => SamplePdf.install().then(done => { if (done && typeof DocList !== 'undefined') DocList.render(); }), 300);
+  /* 管理者が docs/ に置いた配布データ（seed.json）。起動を待たせず裏で確認する */
+  setTimeout(() => SeedIO.checkAndApply().catch(e => Dev.log('配布データの確認に失敗: ' + e.message)), 600);
+  /* 端末間同期：前回有効にしていたら自動で再開（サインインは必要時にポップアップ） */
+  if (location.protocol.startsWith('http') && CloudSync.enabled()){
+    CloudSync.start();
+    setTimeout(() => CloudSync.syncOnce('boot'), 1500);
+  }
   Layout.update();
   window.addEventListener('resize', () => Layout.update());
 }
@@ -14338,7 +14984,7 @@ window.__app = {
   duplicateAsNewObject, statusLabel,
   /* 管理・権限・横断機能 */
   Perm, PERMS, ROLE_PERMS, Audit, Admin, Projects, Folders, Drawings, Members, Vendors,
-  Search, Alerts, MissingShot, DataIO, DriveSync, SCHEMA_VERSION,
+  Search, Alerts, MissingShot, DataIO, DriveSync, SeedIO, CloudSync, SCHEMA_VERSION,
   migrateForTest: migrate, fmtLen, ICON_PX, Sheets, icon, decorateIcons, refreshAlertBadge,
   confirmSheet, pickImageFile, pickDrawingFile, Share, SHARE_EXPIRY, Layout, Guide, Contrast,
   /* PDF（複数ページ） */
