@@ -5457,7 +5457,9 @@ const CloudSync = {
     const t = (e && (e.type || e.error)) || '';
     if (/popup_failed_to_open|popup_blocked/.test(t))
       return 'サインイン画面（ポップアップ）がブロックされました。ブラウザの設定でこのサイトのポップアップを許可して、もう一度押してください';
-    if (/popup_closed|user_cancel|access_denied/.test(t))
+    if (/org_internal|access_denied/.test(t))
+      return 'このアプリは会社の（Workspace）アカウント専用です。アカウント選択画面で「別のアカウントを使用」を押し、会社のアカウントでサインインしてください（プライベートのGoogleアカウントは使えません）';
+    if (/popup_closed|user_cancel/.test(t))
       return 'サインインが途中で閉じられました。もう一度押して、アカウントを選んでください';
     if (/invalid_client|unauthorized/.test(t))
       return 'クライアントIDが正しくないか、JavaScript生成元にこのURLが登録されていません（Google Cloud側の設定を確認）';
@@ -5483,7 +5485,11 @@ const CloudSync = {
         /* これが無いと、ポップアップブロック等の失敗が「無言」になる */
         error_callback: (e) => rej(new Error(this.explainGisError(e)))
       });
-      tc.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      /* select_account：必ずアカウント選択画面を出す。
+         スマホは既定がプライベートアカウントのことが多く、選択を挟まないと
+         「内部アプリなので組織外」で即ブロックされる（実際に起きた）。
+         選択画面の「別のアカウントを使用」から会社アカウントも入力できる */
+      tc.requestAccessToken({ prompt: interactive ? 'select_account' : '' });
     });
   },
   /* 設定画面を開いた時点で部品だけ先に読み込んでおく（失敗しても静かに） */
