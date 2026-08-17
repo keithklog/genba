@@ -5738,9 +5738,13 @@ const CloudSync = {
         sync.applied[f.id] = f.modifiedTime;
         if (stt && (stt.layers || stt.issues || stt.projects || stt.drawings || stt.photos)) applied++;
       }
+      /* PDFの本体（図面原本・提出書類）も行き来させる。
+         JSONに入れると荷物が破裂するので、別ファイル pdf-<id>.pdf として同じフォルダに置く */
+      await this.pushPdfs(folderId);
+      const gotPdfs = await this.pullPdfs(folderId);
       this.lastSyncAt = now();
       this.lastError = '';
-      if (applied){
+      if (applied || gotPdfs){
         Store.scheduleSave();
         this.refreshUI();
       }
@@ -5753,6 +5757,103 @@ const CloudSync = {
       this.busy = false;
       this.renderStatus();
     }
+  },
+
+  /* ---------- PDF本体の同期 ----------
+   * 図面のPDF原本と書類の添付は端末のIndexedDBにあり、荷物のJSONには
+   * 参照（id）しか入っていない。だから「PCで入れた図面がスマホで白紙」が起きた。
+   * 本体は pdf-<id>.pdf として共有フォルダに置き、持っていない端末が拾う。
+   * PDFはidごとに不変（差し替えは新しいidになる）ので、1回置けば終わり */
+  PDF_PREFIX: 'pdf-',
+  _pdfTried: null,
+
+  /* いま使われているPDFのid（図面原本＋書類の提出ファイル） */
+  pdfIdsInUse(){
+    const ids = [];
+    const add = (x) => { if (x && ids.indexOf(x) < 0) ids.push(x); };
+    State.projects.forEach(p => {
+      p.drawings.forEach(d => { if (d.pdf && d.pdf.id) add(d.pdf.id); });
+      (p.documents || []).forEach(doc => (doc.revisions || []).forEach(r => {
+        if (r.file && r.file.pdf && r.file.pdf.id) add(r.file.pdf.id);
+      }));
+    });
+    return ids;
+  },
+  async findInFolder(folderId, name){
+    const q = "'" + folderId + "' in parents and trashed=false and name='"
+      + String(name).replace(/'/g, "\\'") + "'";
+    const r = await (await this.api(this.API + '/files?' + new URLSearchParams({
+      q, fields: 'files(id,name,size)', pageSize: '5',
+      includeItemsFromAllDrives: 'true', supportsAllDrives: 'true'
+    }))).json();
+    return (r.files && r.files[0]) || null;
+  },
+  async uploadBlob(folderId, name, blob){
+    if (blob.size <= 4.5 * 1024 * 1024){
+      const boundary = 'genba' + Math.random().toString(36).slice(2);
+      const body = new Blob([
+        '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'
+          + JSON.stringify({ name, parents: [folderId] })
+          + '\r\n--' + boundary + '\r\nContent-Type: ' + (blob.type || 'application/pdf') + '\r\n\r\n',
+        blob, '\r\n--' + boundary + '--'
+      ]);
+      await this.api(this.UP + '/files?uploadType=multipart&fields=id&supportsAllDrives=true', {
+        method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body
+      });
+      return;
+    }
+    /* 大きいPDFは再開可能アップロード（multipartは約5MBまでのため） */
+    const start = await this.api(this.UP + '/files?uploadType=resumable&fields=id&supportsAllDrives=true', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parents: [folderId] })
+    });
+    const loc = start.headers.get('location');
+    if (!loc) throw new Error('アップロード先を取得できませんでした');
+    const put = await fetch(loc, { method: 'PUT', body: blob });
+    if (!put.ok) throw new Error('PDFのアップロードに失敗（' + put.status + '）');
+  },
+  /* 自分が本体を持っているPDFを、まだ無ければ共有フォルダへ置く */
+  async pushPdfs(folderId){
+    if (typeof PdfStore === 'undefined') return 0;
+    const sync = this.st();
+    sync.pdfUp = sync.pdfUp || {};
+    let n = 0;
+    for (const id of this.pdfIdsInUse()){
+      if (sync.pdfUp[id]) continue;
+      const bytes = await PdfStore.bytes(id);
+      if (!bytes) continue;                     /* 本体を持たない端末の仕事ではない */
+      const name = this.PDF_PREFIX + id + '.pdf';
+      if (!(await this.findInFolder(folderId, name)))
+        await this.uploadBlob(folderId, name, new Blob([bytes], { type: 'application/pdf' }));
+      sync.pdfUp[id] = now();
+      n++;
+    }
+    if (n) Store.scheduleSave();
+    return n;
+  },
+  /* 本体の無いPDFを共有フォルダから拾う。見つからなければ60秒後に再挑戦 */
+  async pullPdfs(folderId){
+    if (typeof PdfStore === 'undefined') return 0;
+    if (!this._pdfTried) this._pdfTried = new Map();
+    let n = 0;
+    for (const id of this.pdfIdsInUse()){
+      if (await PdfStore.bytes(id)) continue;
+      const last = this._pdfTried.get(id) || 0;
+      if (now() - last < 60000) continue;
+      this._pdfTried.set(id, now());
+      const hit = await this.findInFolder(folderId, this.PDF_PREFIX + id + '.pdf');
+      if (!hit) continue;                       /* 持ち主がまだ置いていない */
+      const buf = await (await this.api(this.API + '/files/' + hit.id
+        + '?alt=media&supportsAllDrives=true')).arrayBuffer();
+      await PdfStore.put(id, new Uint8Array(buf));
+      this._pdfTried.delete(id);
+      /* 「本体がありません」の記憶を消し、開いている図面なら即座に描き直す */
+      if (typeof PdfPane !== 'undefined' && PdfPane._failed) delete PdfPane._failed[id];
+      if (typeof Viewer !== 'undefined' && Viewer.drawing &&
+          Viewer.drawing.pdf && Viewer.drawing.pdf.id === id) Viewer.open(Viewer.drawing.id);
+      n++;
+    }
+    return n;
   },
 
   refreshUI(){
