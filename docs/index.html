@@ -5517,14 +5517,20 @@ const CloudSync = {
   async findFolder(){
     const q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + this.FOLDER + "'";
     const r = await (await this.api(this.API + '/files?' + new URLSearchParams({
-      q, fields: 'files(id,name,capabilities/canEdit)',
+      q, fields: 'files(id,name,ownedByMe,capabilities/canEdit)',
       includeItemsFromAllDrives: 'true', supportsAllDrives: 'true', corpora: 'allDrives'
     }))).json();
-    return (r.files && r.files[0]) || null;
+    const list = (r.files || []).filter(f => !f.capabilities || f.capabilities.canEdit !== false);
+    if (!list.length) return null;
+    /* 同名が複数見えるときは「人から共有された方」を優先する。
+       自分のDriveに間違って作られた複製より、管理者の共有フォルダが正。
+       （実際に、共有もれ→各自が別フォルダを作る→同期が分断、が起きた） */
+    return list.find(f => f.ownedByMe === false) || list[0];
   },
-  async ensureFolder(){
+  async ensureFolder(opt){
     const c = this.cfg();
-    if (c.folderId){
+    const o = opt || {};
+    if (c.folderId && !o.rediscover){
       try {
         await this.api(this.API + '/files/' + c.folderId + '?fields=id&supportsAllDrives=true');
         return c.folderId;
@@ -5532,12 +5538,18 @@ const CloudSync = {
     }
     const found = await this.findFolder();
     if (found){ c.folderId = found.id; Store.scheduleSave(); return found.id; }
-    /* 無ければ作る（最初の1台＝管理者。あとで人に共有する） */
+    /* 見つからないときに黙って作ると、共有もれの端末が自分だけのフォルダに
+       書き続ける「分断」が起きる。作るのは明示的に許された場合だけ */
+    if (!o.allowCreate){
+      throw new Error('共有フォルダ「' + this.FOLDER + '」が見つかりません。管理者に、あなたのアカウントへ'
+        + 'このフォルダを「編集者」で共有してもらってから、もう一度お試しください（管理者として新規に始める場合は、管理コンソールの全体設定から）');
+    }
     const made = await (await this.api(this.API + '/files?fields=id&supportsAllDrives=true', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: this.FOLDER, mimeType: 'application/vnd.google-apps.folder' })
     })).json();
     c.folderId = made.id; Store.scheduleSave();
+    toast('Driveに共有フォルダ「' + this.FOLDER + '」を新規作成しました。利用者のアカウントへ「編集者」で共有してください', { ms: 7000 });
     return made.id;
   },
   async listSyncFiles(folderId){
@@ -5763,24 +5775,39 @@ const CloudSync = {
   },
 
   /* ---------- 開始・停止 ---------- */
+  /* 手入力のIDを直せる範囲で直す：空白・改行を除き、全角を半角に。
+     「invalid_client（存在しないID）」で止まった実例への対策 */
+  normalizeClientId(v){
+    return String(v == null ? '' : v)
+      .replace(/[\s　]/g, '')
+      .replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+  },
   async enable(clientId){
     const c = this.cfg();
-    if (clientId) c.client_id = clientId.trim();
+    if (clientId) c.client_id = this.normalizeClientId(clientId);
     if (!c.client_id) { toast('クライアントIDを入れてください（ウェブ アプリケーション用）'); return false; }
+    /* サインイン画面に行く前に、形の崩れたIDを止める（Google側では「401 invalid_client」になり原因が分かりにくい） */
+    if (!/^\d+-[a-z0-9_]+\.apps\.googleusercontent\.com$/i.test(c.client_id)){
+      toast('クライアントIDの形式が違うようです。「数字-英数字.apps.googleusercontent.com」の形の全文を、コピー＆ペーストで入れてください（Google Cloudの「クライアント」画面のコピーボタンが確実です）', { ms: 9000 });
+      return false;
+    }
+    const o = arguments.length > 1 ? (arguments[1] || {}) : {};
     try {
       await this.signIn(true);
+      /* 開始時は必ずフォルダを探し直す（共有もれで各自が別フォルダを作る
+         「分断」の自己修復）。新規作成は管理者（コンソール）だけに許す */
+      await this.ensureFolder({ rediscover: true, allowCreate: !!o.asAdmin });
     } catch(e){
       this.lastError = e.message;
-      toast(e.message, { ms: 7000 });
+      toast(e.message, { ms: 9000 });
       this.renderStatus();
       return false;
     }
     c.enabled = true;
-    await this.ensureFolder();
     Store.scheduleSave();
     this.start();
     await this.syncOnce('force');
-    toast('端末間の同期を開始しました。共有フォルダ「' + this.FOLDER + '」を利用者のアカウントに共有してください', { ms: 6000 });
+    toast('端末間の同期を開始しました。' + (o.asAdmin ? '共有フォルダ「' + this.FOLDER + '」を利用者のアカウントに共有してください' : '15秒ほどで他の端末の作業が届きます'), { ms: 6000 });
     Audit.log('sync.enable', this.FOLDER, 'Drive共有フォルダ同期を開始');
     return true;
   },
@@ -13958,7 +13985,7 @@ const Admin = {
         inp.placeholder = '○○.apps.googleusercontent.com（ウェブ用クライアントID）';
         pad.appendChild(this.field('クライアントID（ウェブ アプリケーション用）', inp));
         pad.appendChild(this.btn('Googleでサインインして同期を開始',
-          () => cs.enable(inp.value)
+          () => cs.enable(inp.value, { asAdmin: true })
             .then(ok => { if (ok) this.render(); })
             .catch(e => toast('サインインできません：' + e.message, { ms: 7000 })), 'pri'));
         pad.appendChild(el('div', { class: 'muted', style: 'font-size:12px;margin-top:10px;line-height:1.8',
