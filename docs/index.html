@@ -5731,8 +5731,11 @@ const CloudSync = {
     } catch(_){}
   },
   renderStatus(){
-    const n = document.getElementById('syncCloudState');
-    if (n) n.textContent = this.status().label;
+    const label = this.status().label;
+    for (const id of ['syncCloudState', 'syncCloudStateAdm']){
+      const n = document.getElementById(id);
+      if (n) n.textContent = label;
+    }
   },
 
   /* ---------- 開始・停止 ---------- */
@@ -13686,8 +13689,11 @@ const Admin = {
         '既に同じ名前のフォルダがあれば作り直さず、<b>名前を変えた現場はフォルダも改名</b>します。' }),
       this.field('反映する現場（' + p.projects.length + '件）', list),
       el('div', { class: 'hint', text:
-        'ここで作るのはフォルダだけです。図面や書類の中身は、現場の「設定」→「クラウド保存先」' +
-        'から出してください。' })
+        (typeof DriveStore !== 'undefined' && DriveStore.ready())
+          ? '端末間の同期にサインイン済みのため、Driveに直接フォルダを作ります（Drive連携ツールは不要）。' +
+            '図面や書類の中身は、現場の「設定」→「クラウド保存先」から出してください。'
+          : 'いまは同期未設定のため、定義ファイルをダウンロードし、PCの「Drive連携」ツールがフォルダを作ります' +
+            '（ツールを起動しておいてください）。同期を有効にすると、この手間なくDriveへ直接作れます。' })
     ], [
       this.btn('閉じる', () => this.closeDialog()),
       this.btn('反映する', () => { DriveSync.export(); this.closeDialog(); }, 'pri')
@@ -13898,6 +13904,43 @@ const Admin = {
    * 全体設定（全社スコープ）
    * ================================================================= */
   view_orgSettings(b){
+    /* ---- 端末間の同期（管理者はPCで作業するので、コンソールに置くのが本筋） ---- */
+    const cs = (typeof CloudSync !== 'undefined') ? CloudSync : null;
+    if (cs){
+      const stt = cs.status();
+      const rows = [];
+      rows.push(el('div', { class: 'kv2' }, [
+        el('span', { text: '状態' }),
+        el('b', { id: 'syncCloudStateAdm', text: stt.label }),
+        el('span', { text: '仕組み' }),
+        el('b', { text: 'Drive共有フォルダ「' + cs.FOLDER + '」経由・約15秒ごと' })
+      ]));
+      const pad = el('div', { class: 'pad' }, rows);
+      if (!cs.cfg().client_id || !cs.cfg().enabled){
+        const inp = this.input(cs.cfg().client_id || '');
+        inp.placeholder = '○○.apps.googleusercontent.com（ウェブ用クライアントID）';
+        pad.appendChild(this.field('クライアントID（ウェブ アプリケーション用）', inp));
+        pad.appendChild(this.btn('Googleでサインインして同期を開始',
+          () => cs.enable(inp.value).then(ok => { if (ok) this.render(); }), 'pri'));
+        pad.appendChild(el('div', { class: 'muted', style: 'font-size:12px;margin-top:10px;line-height:1.8',
+          text: '開始するとDriveに「' + cs.FOLDER + '」フォルダが作られます。利用者のGoogleアカウントに'
+              + 'このフォルダを「編集者」で共有すると、各端末は設定画面からサインインするだけで参加できます。'
+              + 'サインイン中は、現場フォルダの作成と帳票の保存もアプリが直接Driveへ行います。' }));
+      } else {
+        const btns = el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
+          this.btn('今すぐ同期', () => cs.syncOnce('force').then(n => {
+            toast(n === null ? '同期できませんでした（' + cs.lastError + '）' : 'ほかの端末の作業を取り込みました');
+            this.render();
+          })),
+          this.btn('停止', () => { cs.disable(); this.render(); })
+        ]);
+        pad.appendChild(btns);
+        pad.appendChild(el('div', { class: 'muted', style: 'font-size:12px;margin-top:10px;line-height:1.8',
+          text: '利用者側の参加手順：Driveで「' + cs.FOLDER + '」を共有 → 各端末の 設定 →「端末間の同期」→ サインイン。' }));
+      }
+      b.appendChild(this.sec('端末間の同期', [], [pad]));
+    }
+
     const name = this.input(State.org.name);
     b.appendChild(this.sec('会社情報', [], [
       el('div', { class: 'pad' }, [
