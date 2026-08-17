@@ -1560,6 +1560,13 @@ table.perm th.rot{text-align:center;font-size:11px}
 .adm-body .ok,.adm-dialog .ok{color:#5FD98D}
 .adm-body .ng,.adm-dialog .ng{color:#FF9E96}
 
+/* 権限で出ないボタンの説明。黙って消すより、なぜ無いかを一行で言う */
+.adm-permnote{
+  margin:12px 16px;padding:10px 14px;border-radius:var(--adm-r);
+  background:#2A2412;border:1px solid #4A3D1A;color:#F5CE5B;
+  font-size:12px;line-height:1.7;
+}
+
 /* 高コントラストではコンソールの質感も切る（現場アプリと足並みを揃える） */
 body.hc{
   --adm-bg:#000000; --adm-panel:#0D1116; --adm-panel-2:#161C24; --adm-input:#000000;
@@ -11779,10 +11786,15 @@ const Admin = {
         ])
       ];
     });
+    /* 権限が無いときは、ボタンを黙って消すのではなく理由を書く。
+       「あるはずのボタンが無い」は、初めての人には不具合にしか見えない */
+    const canCreate = Perm.can('project.create');
     b.appendChild(this.sec('現場一覧', [
-      Perm.can('project.create') ? this.btn('＋ 現場を作成', () => this.projectDialog(null), 'pri') : null,
+      canCreate ? this.btn('＋ 現場を作成', () => this.projectDialog(null), 'pri') : null,
       this.btn('Driveに反映', () => this.driveSyncDialog(), 'sm')
     ].filter(Boolean), [
+      canCreate ? el('span') : el('div', { class: 'adm-permnote',
+        text: '現場の作成・削除は「所長（管理者）」の操作です。試すときは、左下の「ログイン中のユーザー」を「所長」に切り替えてください。' }),
       rows.length ? this.table([{ label: '現場' }, { label: '所在地' }, { label: '工期' },
         { label: '図面', align: 'right' }, { label: '未完', align: 'right' }, { label: '状態' },
         { label: '', align: 'right' }], rows) : this.empty('現場がありません', '🏗')
