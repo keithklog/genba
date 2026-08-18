@@ -1108,6 +1108,27 @@ table.dame tr:nth-child(even) td{background:#F7F9FA}
 .hdr :focus-visible,#toolbar :focus-visible,.tabbar :focus-visible,.selpop :focus-visible,
 .pdfbar :focus-visible,.palette :focus-visible{outline-color:#fff}
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+
+/* 横向きスマホは実機利用。デモ用の額縁を外して全画面で使う
+   （タブレット向けの中央寄せ額縁が、横向きスマホの幅帯に誤って掛かっていた） */
+@media (orientation:landscape) and (max-height:560px){
+  #shell{padding:0 !important;gap:0 !important;background:var(--chrome) !important;align-items:stretch !important}
+  #app{max-width:none !important;width:100% !important;height:100dvh !important;
+       border-radius:0 !important;box-shadow:none !important;border:0 !important}
+  #dev{display:none !important}
+}
+/* 帳票：「コンテンツを追加」の一覧（モーダルの上に出す。シートは使わない） */
+.rep-addpop{
+  position:absolute;left:10px;right:10px;z-index:60;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:0 18px 50px -12px rgba(16,24,40,.35);
+}
+.rep-addpop button{
+  display:block;width:100%;text-align:left;padding:15px 18px;font-size:15px;
+  background:var(--surface);border:0;border-bottom:1px solid var(--line);cursor:pointer;
+}
+.rep-addpop button:last-child{border-bottom:0}
+.rep-addpop button:active{background:var(--canvas)}
 /* ===================================================================
    PC 管理コンソール
    ---------------------------------------------------------------
@@ -11283,10 +11304,14 @@ const Report = {
       this.sections = this.defaultSections(kind);
     if (this.scope.drawingId === undefined && Viewer.drawing && !Viewer.drawing.doc_id)
       this.scope.drawingId = Viewer.drawing.id;
+    Sheet.closeAll();          /* 裏に残ったシートがあると閉じられなくなるため必ず畳む */
     $('#modalReport').classList.add('on');
     this.build();
   },
-  close(){ $('#modalReport').classList.remove('on'); },
+  close(){
+    const pop = $('#repAddPop'); if (pop) pop.remove();
+    $('#modalReport').classList.remove('on');
+  },
   persist(){
     const pj = P.project(); if (!pj) return;
     pj.report_comp = JSON.parse(JSON.stringify(this.sections));
@@ -11355,21 +11380,33 @@ const Report = {
     bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: 'レイヤー' }), wrap]));
   },
 
+  /* 「コンテンツを追加」。
+     注意：Menu（シート z=40）は帳票モーダル（z=50）の裏に開いてしまい、
+     「押しても何も起きない＋裏で開きっぱなし」という実バグになった。
+     モーダルの中に自前のポップを出す */
   addMenu(){
-    const items = Object.keys(this.SECTION_DEFS).map(type => ({
-      label: this.SECTION_DEFS[type].label,
-      fn: () => {
-        const sec = { id: uid('sec'), type };
-        if (type === 'photo'){ sec.perPage = 3; sec.fields = ['title', 'kindName', 'taken_at', 'taken_by', 'place']; sec.group = 'drawing'; }
-        if (type === 'fix'){ sec.perPage = 2; sec.fields = ['title', 'kindName', 'taken_at', 'vendor', 'due', 'status']; sec.group = 'vendor'; }
-        if (type === 'layout'){ sec.drawingId = this.scope.drawingId || null; sec.allPages = false; }
-        if (type === 'cover'){ sec.title = '工事写真帳'; }
-        /* 表紙は先頭へ、それ以外は末尾へ */
-        if (type === 'cover') this.sections.unshift(sec); else this.sections.push(sec);
-        this.persist(); this.build();
-      }
-    }));
-    Menu.open('コンテンツを追加', items);
+    const old = $('#repAddPop');
+    if (old){ old.remove(); return; }          /* 再タップで閉じる */
+    const pop = el('div', { id: 'repAddPop', class: 'rep-addpop' });
+    Object.keys(this.SECTION_DEFS).forEach(type => {
+      const btn = el('button', { text: this.SECTION_DEFS[type].label });
+      btn.addEventListener('click', () => { pop.remove(); this.addSection(type); });
+      pop.appendChild(btn);
+    });
+    const modal = $('#modalReport');
+    const bar = $('#repBar');
+    pop.style.top = (bar ? bar.offsetTop + bar.offsetHeight + 6 : 70) + 'px';
+    modal.appendChild(pop);
+  },
+  addSection(type){
+    const sec = { id: uid('sec'), type };
+    if (type === 'photo'){ sec.perPage = 3; sec.fields = ['title', 'kindName', 'taken_at', 'taken_by', 'place']; sec.group = 'drawing'; }
+    if (type === 'fix'){ sec.perPage = 2; sec.fields = ['title', 'kindName', 'taken_at', 'vendor', 'due', 'status']; sec.group = 'vendor'; }
+    if (type === 'layout'){ sec.drawingId = this.scope.drawingId || null; sec.allPages = false; }
+    if (type === 'cover'){ sec.title = '工事写真帳'; }
+    /* 表紙は先頭へ、それ以外は末尾へ */
+    if (type === 'cover') this.sections.unshift(sec); else this.sections.push(sec);
+    this.persist(); this.build();
   },
 
   /* ---------- 帳票データを組み立てる ---------- */
@@ -11402,6 +11439,7 @@ const Report = {
   /* ---------- プレビュー ---------- */
   build(){
     const pj = P.project(); if (!pj) return;
+    const stray = $('#repAddPop'); if (stray) stray.remove();
     this.renderBar();
     this.buildDocs();
     const body = $('#repBody'); body.innerHTML = '';

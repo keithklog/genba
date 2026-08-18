@@ -1099,6 +1099,27 @@ table.dame tr:nth-child(even) td{background:#F7F9FA}
 .hdr :focus-visible,#toolbar :focus-visible,.tabbar :focus-visible,.selpop :focus-visible,
 .pdfbar :focus-visible,.palette :focus-visible{outline-color:#fff}
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+
+/* 横向きスマホは実機利用。デモ用の額縁を外して全画面で使う
+   （タブレット向けの中央寄せ額縁が、横向きスマホの幅帯に誤って掛かっていた） */
+@media (orientation:landscape) and (max-height:560px){
+  #shell{padding:0 !important;gap:0 !important;background:var(--chrome) !important;align-items:stretch !important}
+  #app{max-width:none !important;width:100% !important;height:100dvh !important;
+       border-radius:0 !important;box-shadow:none !important;border:0 !important}
+  #dev{display:none !important}
+}
+/* 帳票：「コンテンツを追加」の一覧（モーダルの上に出す。シートは使わない） */
+.rep-addpop{
+  position:absolute;left:10px;right:10px;z-index:60;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:0 18px 50px -12px rgba(16,24,40,.35);
+}
+.rep-addpop button{
+  display:block;width:100%;text-align:left;padding:15px 18px;font-size:15px;
+  background:var(--surface);border:0;border-bottom:1px solid var(--line);cursor:pointer;
+}
+.rep-addpop button:last-child{border-bottom:0}
+.rep-addpop button:active{background:var(--canvas)}
 /* ===================================================================
    PC 管理コンソール
    ---------------------------------------------------------------
