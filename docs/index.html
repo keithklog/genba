@@ -136,6 +136,7 @@
   --toolbar-h:82px;
   --tabbar-h:72px;
   --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-r:env(safe-area-inset-right,0px);
 
   /* §5-2 レイヤー8色パレット（彩度を揃え、隣り合っても混ざらない並び） */
   --lp0:#1668E3; --lp1:#E8590C; --lp2:#1A8245; --lp3:#C2255C;
@@ -489,6 +490,34 @@ b,strong{font-weight:600}
 }
 .tool.marquee .badge-dot{display:block}
 
+/* ---- スマホ横向き（図面を広く・ツールバーは右サイドへ）---- */
+@media (orientation:landscape) and (max-height:560px){
+  #s3.screen.on{
+    display:grid;
+    grid-template-areas:"hdr hdr" "vp tb";
+    grid-template-rows:auto 1fr;
+    grid-template-columns:1fr calc(var(--toolbar-h) + var(--safe-r));
+  }
+  #s3 > .hdr{grid-area:hdr;min-height:48px}
+  #s3 > #viewport{grid-area:vp}
+  #s3 > #toolbar{
+    grid-area:tb;flex-direction:column;height:auto;width:100%;
+    padding-bottom:0;padding-right:var(--safe-r);
+  }
+  #s3 > #toolbar::before{left:0;right:auto;top:0;bottom:0;width:1px;height:auto}
+  #s3 #toolbar .tool{flex:1;min-height:44px;min-width:0;gap:3px}
+  #s3 #toolbar .tool .lb{font-size:10px}
+  #s3 #toolbar .tbsep{width:auto;height:1px;margin:2px 14px}
+  #s3 #toolbar .tool.act{flex:0 0 56px}
+  #s3 #toolbar .tool.sel::before{
+    left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:34px;border-radius:0 3px 3px 0;
+  }
+  /* パレットとシートはビューポート内に収まる（右のツールバーを避ける） */
+  #s3 .palette{bottom:10px}
+  #s3 .sheet{max-height:96%}
+}
+
 /* ---- パレット（ペン/図形の長押し・再タップ）---- */
 .palette{
   position:absolute;left:10px;right:10px;bottom:calc(var(--toolbar-h) + var(--safe-b) + 10px);
@@ -673,6 +702,16 @@ b,strong{font-weight:600}
    =================================================================== */
 #camStage{flex:1;background:#000;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
 #camStage video,#camStage .fake{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#camStage video{transform-origin:center center}
+/* 撮影コントロール（ズーム・フラッシュ・切替・連写）。右手の親指が届く位置 */
+.camctl{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;z-index:5}
+.camctl .cbtn{
+  width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,.30);
+  background:rgba(0,0,0,.42);color:#fff;font-size:17px;font-weight:700;line-height:1;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.camctl .cbtn.on{background:var(--accent);border-color:var(--accent)}
+.camctl .cbtn:disabled{opacity:.35}
 .camfoot{
   flex:0 0 auto;background:#000;padding:16px 20px calc(20px + var(--safe-b));
   display:flex;align-items:center;justify-content:space-between;
@@ -735,6 +774,36 @@ b,strong{font-weight:600}
 .rp-meta{font-size:10px;color:#5A6673;margin-top:3px}
 .rp-grp{font-size:12px;font-weight:700;color:#0F4FAE;margin-bottom:7px}
 .rp-grid{display:grid;grid-template-columns:1fr;gap:8px}
+/* ---- 帳票の組み立て（コンテンツ見出し・横型セル・D&D） ---- */
+.rep-sec{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+  margin:14px 8px 6px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;
+}
+.rep-sec-t{display:flex;align-items:baseline;gap:8px}
+.rep-sec-c{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rep-sec-c .btn.dan{color:#B3261E}
+.rp-cell.h{display:grid;grid-template-columns:46% 1fr;gap:0 12px;align-items:start}
+.rp-cell.h img{grid-row:1 / span 2;width:100%;height:100%;max-height:220px;object-fit:contain;background:#F4F6F8}
+.rp-cell.h .rp-kvs{min-width:0}
+.rp-cell.h .rp-act{grid-column:2}
+.rp-cell img{cursor:grab}
+.rp-cell.dragsrc{opacity:.35}
+.rp-cell.drophint{outline:3px solid var(--accent);outline-offset:2px;border-radius:8px}
+.rp-ghost{
+  position:fixed;z-index:999;pointer-events:none;transform:translate(-50%,-55%);
+  width:130px;max-height:100px;object-fit:cover;border-radius:10px;
+  box-shadow:0 10px 30px rgba(16,24,40,.4);opacity:.9;
+}
+.rp-cover{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;min-height:420px}
+.rp-cover .cv-t{font-size:26px;font-weight:800;letter-spacing:.08em}
+.rp-cover .cv-tbl{width:78%}
+.rp-layout-ph{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  min-height:200px;border:2px dashed var(--line-ctl);border-radius:12px;margin:10px;
+  color:var(--fg-2);text-align:center;padding:14px;
+}
+
 .rp-cell{border:1px solid #98A3AF;padding:7px;font-size:11px;position:relative;background:#fff;color:#151A20}
 .rp-cell img{width:100%;height:150px;object-fit:contain;background:#F2F4F7;display:block}
 .rp-kv{display:flex;border-top:1px solid #E3E7EC;padding:3px 0;font-size:10.5px}
@@ -871,7 +940,9 @@ table.dame tr:nth-child(even) td{background:#F7F9FA}
 
 /* ---- 複数ページPDFのページ送り ---- */
 .pdfbar{
-  position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:58;
+  /* z-index はシート（40）より下。指摘一覧などのメニューを開いたとき、
+     ページ切替がメニューの上に浮かぶ、という苦情への対処 */
+  position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:34;
   display:flex;align-items:center;gap:2px;background:rgba(29,36,44,.94);color:#fff;
   border:1px solid rgba(255,255,255,.10);border-radius:var(--r-full);padding:5px;
   box-shadow:var(--sh-dark);
@@ -1785,6 +1856,7 @@ body.hc .adm-card::before,body.hc .adm-sec::before{display:none}
     <div class="grab"></div>
     <div class="sheet-hdr">
       <h2>レイヤー</h2>
+      <button class="btn gh" data-act="layer-add">＋追加</button>
       <button class="btn gh" id="mergeBtn" data-act="merge-start">合成</button>
       <button class="iconbtn" data-act="close-sheet">✕</button>
     </div>
@@ -1921,6 +1993,12 @@ body.hc .adm-card::before,body.hc .adm-sec::before{display:none}
       <video id="camVideo" playsinline muted autoplay style="display:none"></video>
       <div class="blackboard" id="camBB" style="display:none"></div>
       <div class="camstrip" id="camStrip"></div>
+      <div class="camctl">
+        <button class="cbtn" data-act="cam-flip" id="camFlipBtn" aria-label="カメラ切替">切替</button>
+        <button class="cbtn" data-act="cam-torch" id="camTorchBtn" aria-label="フラッシュ">照明</button>
+        <button class="cbtn" data-act="cam-zoom" id="camZoomBtn" aria-label="ズーム">1×</button>
+        <button class="cbtn" data-act="cam-burst" id="camBurstBtn" aria-label="連写モード">連写</button>
+      </div>
     </div>
     <div class="camfoot">
       <button class="btn gh" data-act="cam-pick" style="color:#fff;border-color:rgba(255,255,255,.28)">端末から選ぶ</button>
@@ -2538,9 +2616,24 @@ const P = {
   drawingIn(pj, id){ return pj.drawings.find(d => d.id === id); },
   layers(){ const d = this.drawing(); return d ? d.layers : []; },
   layer(id){ return this.layers().find(l => l.id === id); },
+  /* 自分のレイヤーは複数持てる。描画先（active）を切り替えられる */
+  myLayers(d){
+    const dd = d || this.drawing(); if (!dd) return [];
+    return dd.layers.filter(l => l.scope === 'personal' && l.owner_id === State.me.id);
+  },
   myLayer(){
     const d = this.drawing(); if (!d) return null;
-    return d.layers.find(l => l.scope === 'personal' && l.owner_id === State.me.id) || null;
+    const mine = this.myLayers(d);
+    if (!mine.length) return null;
+    State.ui.activeLayer = State.ui.activeLayer || {};
+    const act = mine.find(l => l.id === State.ui.activeLayer[d.id]);
+    return act || mine[0];
+  },
+  setActiveLayer(l){
+    const d = this.drawing(); if (!d || !l) return;
+    State.ui.activeLayer = State.ui.activeLayer || {};
+    State.ui.activeLayer[d.id] = l.id;
+    Store.scheduleSave();
   },
   issue(id){
     for (const pj of State.projects){ const i = pj.issues.find(x => x.id === id); if (i) return i; }
@@ -2611,12 +2704,17 @@ function newLayer(name, scope, ownerId, order, colorIdx){
     created_at: now()
   };
 }
+/* レイヤーの既定名は「ユーザー名 月/日」。誰がいつ書いたか名前だけで分かる */
+function defaultLayerName(){
+  const t = new Date();
+  return State.me.name + ' ' + (t.getMonth() + 1) + '/' + t.getDate();
+}
 /* §5-1「図面を初めて開けば自分のレイヤーが既にある」 */
 function ensureMyLayer(){
   const d = P.drawing(); if (!d) return null;
   let mine = P.myLayer();
   if (!mine){
-    mine = newLayer('自分', 'personal', State.me.id, d.layers.length, d.layers.length);
+    mine = newLayer(defaultLayerName(), 'personal', State.me.id, d.layers.length, d.layers.length);
     d.layers.push(mine);
     Dev.log('§5-1 personal レイヤーを自動生成: ' + State.me.name);
     Sync.markDirty();
@@ -4203,7 +4301,8 @@ const Projects = {
       end_date: input.end_date || isoDate(now() + 180 * DAY),
       archived: false,
       created_at: now(),
-      folders: (input.folders || ['意匠図', '構造図', '設備図']).map(n => ({ id: uid('f'), name: n })),
+      /* フォルダは「任意で作る整理棚」。図種の分類は discipline が担うので、既定では作らない */
+      folders: (input.folders || []).map(n => ({ id: uid('f'), name: n })),
       drawings: [],
       issues: []
     };
@@ -4323,6 +4422,40 @@ const Folders = {
   }
 };
 
+/* ---------------- 図種（図面の分類。フォルダとは独立したフィルタ軸） ----------------
+ * 既定は 意匠図・構造図・電気設備図・機械設備図。
+ * リスト選択＋任意追加ができ、削除は管理コンソール（全体設定）から。 */
+const Disciplines = {
+  DEFAULT: ['意匠図', '構造図', '電気設備図', '機械設備図'],
+  list(){
+    if (!Array.isArray(State.org.disciplines) || !State.org.disciplines.length)
+      State.org.disciplines = this.DEFAULT.slice();
+    return State.org.disciplines;
+  },
+  add(name){
+    const v = String(name || '').trim();
+    if (!v) return false;
+    if (this.list().includes(v)) return true;
+    this.list().push(v);
+    Audit.log('discipline.add', v, '');
+    Sync.markDirty('discipline'); Store.scheduleSave();
+    return true;
+  },
+  remove(name){
+    const i = this.list().indexOf(name);
+    if (i < 0) return false;
+    this.list().splice(i, 1);
+    Audit.log('discipline.remove', name, '図面側の設定値はそのまま残る');
+    Sync.markDirty('discipline'); Store.scheduleSave();
+    return true;
+  },
+  countUsing(name){
+    let n = 0;
+    State.projects.forEach(p => p.drawings.forEach(d => { if (d.discipline === name) n++; }));
+    return n;
+  }
+};
+
 /* ---------------- 図面 ---------------- */
 const Drawings = {
   /* 手続き生成（サンプル図面）またはアップロード画像から作る */
@@ -4334,6 +4467,7 @@ const Drawings = {
     const d = {
       id, name: input.name || '新しい図面', number: input.number || '',
       folder_id: input.folder_id || null,
+      discipline: input.discipline || '',          /* 図種（意匠図・構造図…）。空も可 */
       current_revision_id: id + '_r1',
       scale: input.scale || 100, paper_size: input.paper_size || 'A1', origin: 'bottom-left',
       downloaded: true, published: input.published !== false,
@@ -5432,7 +5566,9 @@ const CloudSync = {
   status(){
     if (!this.cfg().client_id) return { key: 'unconfigured', label: '未設定' };
     if (!this.cfg().enabled) return { key: 'off', label: '停止中' };
-    if (!this.token) return { key: 'signedout', label: 'サインイン待ち' };
+    this.hydrateToken();
+    if (!this.token || now() - this.tokenAt >= 55 * 60 * 1000)
+      return { key: 'signedout', label: 'サインイン待ち（今すぐ同期で再開）' };
     if (this.lastError) return { key: 'error', label: 'エラー: ' + this.lastError };
     if (this.busy) return { key: 'syncing', label: '同期中…' };
     return { key: 'on', label: '同期中（' + (this.lastSyncAt ? new Date(this.lastSyncAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '準備中') + '）' };
@@ -5479,6 +5615,7 @@ const CloudSync = {
             this.token = t.access_token;
             this.tokenAt = now();
             this.lastError = '';
+            this.saveToken();
             res(true);
           } else rej(new Error(this.explainGisError(t) ));
         },
@@ -5494,8 +5631,28 @@ const CloudSync = {
   },
   /* 設定画面を開いた時点で部品だけ先に読み込んでおく（失敗しても静かに） */
   warm(){ this.loadGis().catch(() => {}); },
+  /* 取得済みトークンは端末に保存し、開き直しても再利用する（約1時間有効）。
+     これが無いと「開くたびにサインイン」になる（実際に苦情が出た） */
+  hydrateToken(){
+    if (this.token) return;
+    const s = this.st();
+    if (s.tok && s.tok.v && now() - s.tok.at < 55 * 60 * 1000){
+      this.token = s.tok.v; this.tokenAt = s.tok.at;
+    }
+  },
+  saveToken(){
+    const s = this.st();
+    s.tok = { v: this.token, at: this.tokenAt };
+    Store.scheduleSave();
+  },
+  /* 裏の同期（15秒ごと）はサインイン画面を絶対に出さない。
+     期限切れなら静かに止まり、状態表示だけ「サインイン待ち」にする。
+     画面を出してよいのは、人がボタンを押した時（_inter=true）だけ */
+  _inter: true,
   async ensureToken(){
+    this.hydrateToken();
     if (this.token && now() - this.tokenAt < 50 * 60 * 1000) return this.token;
+    if (!this._inter) throw new Error('サインインの有効期限が切れました（「今すぐ同期」を押すと再開します）');
     await this.signIn(false).catch(async () => { await this.signIn(true); });
     return this.token;
   },
@@ -5506,7 +5663,7 @@ const CloudSync = {
     const res = await fetch(url, Object.assign({}, opt, {
       headers: Object.assign({ Authorization: 'Bearer ' + t }, (opt && opt.headers) || {})
     }));
-    if (res.status === 401){ this.token = null; throw new Error('サインインが切れました'); }
+    if (res.status === 401){ this.token = null; this.st().tok = null; throw new Error('サインインが切れました'); }
     if (!res.ok){
       let m = res.status + '';
       try { m = (await res.json()).error.message; } catch(_){}
@@ -5592,6 +5749,7 @@ const CloudSync = {
       folders: p.folders,
       drawings: p.drawings.map(d => ({
         id: d.id, name: d.name, number: d.number, folder_id: d.folder_id,
+        discipline: d.discipline || '',
         current_revision_id: d.current_revision_id, scale: d.scale, paper_size: d.paper_size,
         origin: d.origin, published: d.published, image_uri: d.image_uri, pdf: d.pdf,
         paper: d.paper, geom: d.geom, revisions: d.revisions, updated_at: d.updated_at,
@@ -5713,6 +5871,7 @@ const CloudSync = {
   async syncOnce(reason){
     if (!this.enabled() || this.busy) return null;
     this.busy = true;
+    this._inter = (reason === 'force');
     this.renderStatus();
     try {
       const folderId = await this.ensureFolder();
@@ -5755,6 +5914,7 @@ const CloudSync = {
       return null;
     } finally {
       this.busy = false;
+      this._inter = true;      /* 通常の操作（帳票出力など）では対話してよい */
       this.renderStatus();
     }
   },
@@ -7426,6 +7586,21 @@ const Viewer = {
       this.drawMarquee();
       return;
     }
+    if (tool === 'select' && this._resizeHandle &&
+        Math.hypot(p.x - this._resizeHandle.x, p.y - this._resizeHandle.y) <= 24){
+      const h = this._resizeHandle;
+      const sel = h.sel, ly = sel.layer;
+      if (ly.owner_id !== State.me.id){ toast('他の人の書き込みは変更できません'); }
+      else {
+        const bb = this.annoBBox(sel.anno);
+        const anchor = { x: bb.x1, y: bb.y1 };            /* 対角（左下）を固定点にする */
+        const w0 = this.toWorld(p.x, p.y);
+        const d0 = Math.max(1e-6, Math.hypot(w0.x - anchor.x, w0.y - anchor.y));
+        this._drag = { mode: 'resize', sel, anchor, d0,
+          snap: JSON.parse(JSON.stringify(sel.anno.geometry)), k: 1 };
+        return;
+      }
+    }
     if (tool === 'select'){
       /* 選択中のもの（または触れたもの）は、そのまま掴んで動かせる */
       const hit = this.hitAny(p.x, p.y);
@@ -7481,6 +7656,13 @@ const Viewer = {
     } else if (this._drag.mode === 'marquee'){
       this._drag.p1 = p;
       this.drawMarquee();
+    } else if (this._drag.mode === 'resize'){
+      const d = this._drag;
+      const w = this.toWorld(p.x, p.y);
+      d.k = Math.max(0.08, Math.hypot(w.x - d.anchor.x, w.y - d.anchor.y) / d.d0);
+      this.scaleAnnoFrom(d.sel.anno, d.snap, d.anchor.x, d.anchor.y, d.k);
+      this.renderAnnotations();
+      this.renderSelection();
     }
   },
   onUp(e){
@@ -7494,6 +7676,17 @@ const Viewer = {
     if (d.mode === 'pan'){
       if (d.moved){ this.saveViewport(); return; }
       this.onTap(d.p0);
+      return;
+    }
+    if (d.mode === 'resize'){
+      const a2 = d.sel.anno, snap = d.snap;
+      if (Math.abs(d.k - 1) > 0.01){
+        touchAnnotation(a2);
+        this.pushHistory('サイズ変更（' + (d.k > 1 ? '拡大' : '縮小') + ' ×' + d.k.toFixed(2) + '）',
+          () => { a2.geometry = JSON.parse(JSON.stringify(snap)); Viewer.renderAnnotations(); Viewer.renderSelection(); });
+        Sync.markDirty('resize');
+      }
+      this.renderSelection();
       return;
     }
     if (d.mode === 'move'){
@@ -7875,6 +8068,27 @@ const Viewer = {
     return { x1: 0, x2: 0, y1: 0, y2: 0 };
   },
 
+  /* 図形の拡縮。snap（元の幾何の控え）を基準に、固定点(ax,ay)からk倍する。
+     元から計算し直すので、ドラッグ中に誤差が積み上がらない */
+  scaleAnnoFrom(a, snap, ax, ay, k){
+    const sx = (x) => ax + (x - ax) * k;
+    const sy = (y) => ay + (y - ay) * k;
+    const g = a.geometry, o = snap;
+    if (a.type === 'stroke' || (o.kind === 'poly' && o.pts)){
+      g.pts = o.pts.map(p => [sx(p[0]), sy(p[1])]);
+    } else if (a.type === 'stamp' || a.type === 'check'){
+      g.x = sx(o.x); g.y = sy(o.y); g.r = Math.max(4, (o.r || 20) * k);
+    } else if (a.type === 'measure_rect' || o.kind === 'rect' || o.kind === 'cloud'){
+      g.x = sx(o.x); g.y = sy(o.y); g.w = o.w * k; g.h = o.h * k;
+    } else if (a.type === 'measure' || o.kind === 'line' || o.kind === 'arrow'){
+      g.x1 = sx(o.x1); g.y1 = sy(o.y1); g.x2 = sx(o.x2); g.y2 = sy(o.y2);
+    } else if (o.kind === 'circle'){
+      g.cx = sx(o.cx); g.cy = sy(o.cy); g.r = Math.max(2, o.r * k);
+    } else if (o.kind === 'ellipse'){
+      g.cx = sx(o.cx); g.cy = sy(o.cy); g.rx = Math.max(2, o.rx * k); g.ry = Math.max(2, o.ry * k);
+    }
+  },
+
   applySelection(p0, p1){
     if (Math.abs(p1.x - p0.x) < 6 && Math.abs(p1.y - p0.y) < 6){
       this.clearSelection();
@@ -7909,6 +8123,7 @@ const Viewer = {
     this.renderPins();
     /* 選択中の描画・図形にハイライト枠を出す（画面座標） */
     const ov = $('#gOverlay');
+    this._resizeHandle = null;
     this.selection.forEach(s => {
       if (s.anno.type === 'pin') return;
       const bb = this.annoBBox(s.anno);
@@ -7917,6 +8132,17 @@ const Viewer = {
         x: a.x - 4, y: a.y - 4, width: (b.x - a.x) + 8, height: (b.y - a.y) + 8,
         fill: 'none', stroke: '#0B63CE', 'stroke-width': 2, 'stroke-dasharray': '5 4', rx: 4
       }));
+      /* 単一選択なら右下にリサイズハンドル。描いた後に大きさを直せる */
+      if (this.selection.length === 1 && s.anno.type !== 'text'){
+        const hx = b.x + 4, hy = b.y + 4;
+        ov.appendChild(svg('circle', { cx: hx, cy: hy, r: 11,
+          fill: '#FFFFFF', stroke: '#0B63CE', 'stroke-width': 2.5 }));
+        ov.appendChild(svg('path', {
+          d: 'M' + (hx - 4) + ' ' + (hy + 1) + ' l4 4 l4 -4 M' + (hx + 1) + ' ' + (hy - 4) + ' l4 4 l-4 4',
+          fill: 'none', stroke: '#0B63CE', 'stroke-width': 1.6, 'stroke-linecap': 'round'
+        }));
+        this._resizeHandle = { x: hx, y: hy, sel: s, bb };
+      }
     });
     this.placeSelPop();
   },
@@ -8508,6 +8734,8 @@ const Layers = {
       if (l.scope === 'merged') meta.push('合成（元' + (l.source_layer_ids || []).length + '枚）');
       else meta.push(P.user(l.owner_id).name + (mine ? '' : ' / 閲覧のみ'));
       meta.push(l.annotations.length + '点');
+      const active = P.myLayer();
+      if (mine && l.scope === 'personal' && active && active.id === l.id) meta.unshift('✎ 描画先');
       const conflicts = l.annotations.filter(a => a.conflict).length;
       if (conflicts) meta.push('競合 ' + conflicts + '件');
 
@@ -8575,9 +8803,45 @@ const Layers = {
     ];
     if (Perm.can('share.create'))
       items.unshift({ label: 'このレイヤーを共有', fn: () => { Sheet.close(); setTimeout(() => Share.open(l.id), 120); } });
+    if (mine && l.scope === 'personal'){
+      const active = P.myLayer();
+      if (!active || active.id !== l.id)
+        items.unshift({ label: 'このレイヤーに描く（描画先にする）', fn: () => {
+          P.setActiveLayer(l); this.render();
+          toast('描画先を「' + l.name + '」にしました');
+        } });
+    }
     if (mine) items.unshift({ label: '名称変更', fn: () => this.rename(l) });
     if (mine && l.scope === 'merged') items.push({ label: 'このレイヤーを削除', danger: true, fn: () => this.remove(l) });
+    if (mine && l.scope === 'personal' && P.myLayers().length > 1)
+      items.push({ label: 'このレイヤーを削除', danger: true, fn: () => this.removePersonal(l) });
     Menu.open(l.name, items);
+  },
+  /* 任意のレイヤーを追加。既定名は「ユーザー名 月/日」（重複時は連番） */
+  addPersonal(){
+    const d = P.drawing(); if (!d) return;
+    let name = defaultLayerName(), i = 2;
+    while (d.layers.some(l => l.name === name)) name = defaultLayerName() + ' (' + (i++) + ')';
+    const v = prompt('新しいレイヤーの名前', name);
+    if (v === null) return;
+    const l = newLayer(v.trim() || name, 'personal', State.me.id, d.layers.length, d.layers.length);
+    d.layers.push(l);
+    P.setActiveLayer(l);
+    Viewer.pushHistory('レイヤー追加', () => { const i2 = d.layers.indexOf(l); if (i2 >= 0) d.layers.splice(i2, 1); });
+    this.render(); Sync.markDirty('layer.add');
+    toast('「' + l.name + '」を追加し、描画先にしました');
+  },
+  /* 自分のレイヤーの削除（最後の1枚は消せない。中身があれば確認する） */
+  removePersonal(l){
+    const d = P.drawing();
+    if (P.myLayers(d).length <= 1){ toast('自分のレイヤーは最低1枚必要です'); return; }
+    if (l.annotations.length &&
+        !confirm('「' + l.name + '」には ' + l.annotations.length + ' 点の書き込みがあります。削除しますか？')) return;
+    const i = d.layers.indexOf(l);
+    const removed = d.layers.splice(i, 1)[0];
+    Viewer.pushHistory('レイヤー削除', () => { d.layers.splice(i, 0, removed); });
+    this.render(); Viewer.renderAnnotations(); Viewer.renderPins(); Sync.markDirty('layer.remove');
+    toast('「' + l.name + '」を削除しました');
   },
   rename(l){
     const v = prompt('レイヤー名', l.name);
@@ -9142,6 +9406,7 @@ const ReportData = {
     const seen = new Set();
     const drawings = pj.drawings.filter(d => !d.doc_id && (!s.drawingId || d.id === s.drawingId));
     drawings.forEach(d => d.layers.forEach(l => l.annotations.forEach(a => {
+      if (s.layerIds && s.layerIds.length && s.layerIds.indexOf(l.id) < 0) return;  /* レイヤー絞り込み */
       if (a.type !== 'pin') return;
       const issue = a.payload.issue_id ? P.issue(a.payload.issue_id) : null;
       const push = (pid, fix) => {
@@ -9197,7 +9462,9 @@ const ReportData = {
   },
   _build(tplId, scope){
     const pj = P.project();
-    const tpl = reportTemplate(tplId, pj);
+    /* 帳票は「コンテンツの組み立て」で作るため、保存済みテンプレートの
+       IDだけでなく、その場で組んだテンプレート実体も受け付ける */
+    const tpl = (tplId && typeof tplId === 'object') ? tplId : reportTemplate(tplId, pj);
     const s = scope || {};
 
     if (tpl.kind === 'photo'){
@@ -9225,6 +9492,8 @@ const ReportData = {
     if (tpl.kind === 'issue'){
       let issues = pj.issues.slice();
       if (s.drawingId) issues = issues.filter(i => { const l = Issues.locate(i); return l && l.drawing.id === s.drawingId; });
+      if (s.layerIds && s.layerIds.length)
+        issues = issues.filter(i => { const l = Issues.locate(i); return l && s.layerIds.indexOf(l.layer.id) >= 0; });
       if (s.vendorId) issues = issues.filter(i => i.vendor_id === s.vendorId);
       issues.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
       const columns = [
@@ -9273,6 +9542,29 @@ const ReportData = {
     }));
     return { kind: 'doc', tpl, title: '書類台帳（Submittal）',
       header: reportHeader(pj, [['書類数', rows.length + ' 件']]), orientation: 'landscape', columns, rows };
+  },
+
+  /* 表紙（提出用）：タイトル・工事情報・提出日・作成者だけの1ページ */
+  buildCover(opt){
+    const pj = P.project();
+    const o = opt || {};
+    const doc = { kind: 'cover', title: o.title || '工事写真帳', subtitle: o.subtitle || '',
+      header: reportHeader(pj, []), orientation: 'portrait' };
+    doc.project = pj;
+    return doc;
+  },
+  /* レイアウト（マークアップ図面）：PDF出力時に p74 が描く。ここでは指定を束ねるだけ */
+  buildLayout(opt){
+    const pj = P.project();
+    const o = opt || {};
+    const d = pj.drawings.find(x => x.id === o.drawingId && !x.doc_id)
+           || pj.drawings.find(x => !x.doc_id);
+    const doc = { kind: 'layout', title: 'レイアウト（' + (d ? d.name : '図面なし') + '）',
+      drawing: d || null, allPages: !!o.allPages,
+      layerIds: (o.layerIds && o.layerIds.length) ? o.layerIds.slice() : null,
+      header: reportHeader(pj, []), orientation: 'landscape' };
+    doc.project = pj;
+    return doc;
   }
 };
 
@@ -9307,19 +9599,20 @@ function paginatePhotos(doc){
  * 出力1：Excel（.xlsx）
  * =================================================================== */
 const ReportXlsx = {
-  async photo(doc){
+  /* シート仕様を作る（複数コンテンツを1つのブックに束ねるため、build はしない） */
+  photoSheet(doc){
     const S = XLSX.S;
     const rows = [];
     const merges = [];
     const images = [];
     const rowHeights = {};
     const fields = doc.fields;
-    const COLS = doc.perPage >= 6 ? 2 : (doc.perPage === 4 ? 2 : 1);
-    const PHOTO_W = COLS === 2 ? 34 : 46;      /* 文字数換算の列幅 */
-    const LABEL_W = 16, VALUE_W = COLS === 2 ? 26 : 52;
-    const cols = [];
-    for (let c = 0; c < COLS; c++){ cols.push({ w: LABEL_W }, { w: VALUE_W }); }
-    const width = COLS * 2;
+    const HORIZ = doc.perPage <= 3;            /* 3枚以下：左に写真、右に情報 */
+    const COLS = HORIZ ? 1 : 2;
+    const width = HORIZ ? 4 : COLS * 2;        /* 横型: 写真2列 + ラベル + 値 */
+    const cols = HORIZ
+      ? [{ w: 24 }, { w: 24 }, { w: 16 }, { w: 44 }]
+      : (() => { const c = []; for (let i = 0; i < COLS; i++) c.push({ w: 16 }, { w: 26 }); return c; })();
 
     const put = (arr) => { rows.push(arr); return rows.length; };
     const blank = () => put([]);
@@ -9335,8 +9628,6 @@ const ReportXlsx = {
     blank();
 
     const pages = paginatePhotos(doc);
-    /* 写真は 1セルぶんの高さに収める。1行 ≒ 20px として計算する */
-    const PH_ROWS = COLS === 2 ? 11 : 15;
     const PX_PER_ROW = 20;
 
     pages.forEach((pg, pi) => {
@@ -9344,42 +9635,64 @@ const ReportXlsx = {
         const r = put([{ v: pg.group, s: S.LABEL }]);
         merges.push('A' + r + ':' + colName(width - 1) + r);
       }
-      for (let i = 0; i < pg.items.length; i += COLS){
-        const line = pg.items.slice(i, i + COLS);
-        /* 写真の行 */
-        const photoRow = put(line.flatMap(() => [{ v: '', s: S.CELL }, { v: '', s: S.CELL }]));
-        rowHeights[photoRow] = PH_ROWS * PX_PER_ROW * 0.75;   /* pt */
-        line.forEach((it, k) => {
-          merges.push(colName(k * 2) + photoRow + ':' + colName(k * 2 + 1) + photoRow);
+      if (HORIZ){
+        /* 1行＝1枚：A:B に写真（項目数ぶんの行に跨がる）、C:D に項目 */
+        pg.items.forEach(it => {
+          const span = Math.max(fields.length, 8);
+          const top = rows.length + 1;
+          fields.forEach((f, i) => {
+            const def = PHOTO_FIELDS[f];
+            put([{ v: '', s: S.CELL }, { v: '', s: S.CELL },
+                 { v: def ? def.label : '', s: S.LABEL },
+                 { v: def ? def.get(it) : '', s: S.WRAP }]);
+          });
+          for (let i = fields.length; i < span; i++) put([{ v: '', s: S.CELL }, { v: '', s: S.CELL }]);
+          merges.push('A' + top + ':B' + (top + span - 1));
           images.push({
             data: dataUriToBytes(it.meta.display_uri), ext: 'jpeg',
-            from: { c: k * 2, r: photoRow - 1, dx: 3, dy: 3 },
-            to: { c: k * 2 + 2, r: photoRow, dx: -3, dy: -3 }
+            from: { c: 0, r: top - 1, dx: 3, dy: 3 },
+            to: { c: 2, r: top + span - 1, dx: -3, dy: -3 }
           });
+          blank();
         });
-        /* 説明欄（項目ごとに1行） */
-        fields.forEach(f => {
-          const def = PHOTO_FIELDS[f];
-          if (!def) return;
-          const cells = [];
-          line.forEach(it => {
-            cells.push({ v: def.label, s: S.LABEL });
-            cells.push({ v: def.get(it), s: S.WRAP });
+      } else {
+        const PH_ROWS = 11;
+        for (let i = 0; i < pg.items.length; i += COLS){
+          const line = pg.items.slice(i, i + COLS);
+          const photoRow = put(line.flatMap(() => [{ v: '', s: S.CELL }, { v: '', s: S.CELL }]));
+          rowHeights[photoRow] = PH_ROWS * PX_PER_ROW * 0.75;
+          line.forEach((it, k) => {
+            merges.push(colName(k * 2) + photoRow + ':' + colName(k * 2 + 1) + photoRow);
+            images.push({
+              data: dataUriToBytes(it.meta.display_uri), ext: 'jpeg',
+              from: { c: k * 2, r: photoRow - 1, dx: 3, dy: 3 },
+              to: { c: k * 2 + 2, r: photoRow, dx: -3, dy: -3 }
+            });
           });
-          put(cells);
-        });
-        blank();
+          fields.forEach(f => {
+            const def = PHOTO_FIELDS[f];
+            if (!def) return;
+            const cells = [];
+            line.forEach(it => {
+              cells.push({ v: def.label, s: S.LABEL });
+              cells.push({ v: def.get(it), s: S.WRAP });
+            });
+            put(cells);
+          });
+          blank();
+        }
       }
       if (pi < pages.length - 1) blank();
     });
 
-    return XLSX.build([{
-      name: doc.title, cols, rows, merges, rowHeights, images,
-      landscape: doc.orientation === 'landscape'
-    }], { title: doc.title, creator: State.me.name });
+    return { name: doc.title, cols, rows, merges, rowHeights, images,
+      landscape: doc.orientation === 'landscape' };
+  },
+  async photo(doc){
+    return XLSX.build([this.photoSheet(doc)], { title: doc.title, creator: State.me.name });
   },
 
-  table(doc){
+  tableSheet(doc){
     const S = XLSX.S;
     const rows = [];
     const merges = [];
@@ -9398,12 +9711,13 @@ const ReportXlsx = {
       if (typeof v === 'number') return { v, t: 'n', s: S.NUM };
       return { v: v === undefined || v === null ? '' : String(v), s: S.WRAP };
     })));
-    return XLSX.build([{
-      name: doc.title.slice(0, 28), cols: doc.columns.map(c => ({ w: c.w || 14 })),
+    return { name: doc.title.slice(0, 28), cols: doc.columns.map(c => ({ w: c.w || 14 })),
       rows, merges, freeze: 'A' + (headRow + 1),
       autofilter: 'A' + headRow + ':' + colName(width - 1) + (rows.length),
-      landscape: true
-    }], { title: doc.title, creator: State.me.name });
+      landscape: true };
+  },
+  table(doc){
+    return XLSX.build([this.tableSheet(doc)], { title: doc.title, creator: State.me.name });
   },
 
   async run(doc){
@@ -9544,10 +9858,42 @@ const ReportPdf = {
   async drawPhotoCell(p, it, doc, x, y, w, h){
     const g = p.g, u = p.u;
     this.box(g, x, y, w, h, '#9AA4AE', '#fff');
-    const rowH = 13 * u;                                   /* 説明1行の高さ */
+    const img = await loadImageAsync(it.meta.display_uri);
+    const rowH = 13 * u;
+
+    /* 3枚以下：左に写真、右に情報（工事写真帳の標準体裁） */
+    if (doc.perPage <= 3){
+      const imgW = w * 0.46;
+      if (img && img.width){
+        const sc = Math.min((imgW - 10 * u) / img.width, (h - 10 * u) / img.height);
+        const iw = img.width * sc, ih = img.height * sc;
+        try { g.drawImage(img, x + 5 * u + (imgW - 10 * u - iw) / 2, y + (h - ih) / 2, iw, ih); } catch(_){}
+      } else {
+        this.box(g, x + 5 * u, y + 5 * u, imgW - 10 * u, h - 10 * u, '#DDE1E6', '#F4F6F8');
+        this.text(g, '（写真）', x + imgW / 2 - 14 * u, y + h / 2, 8 * u, false, '#B4BCC5');
+      }
+      g.strokeStyle = '#DDE1E6'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x + imgW, y); g.lineTo(x + imgW, y + h); g.stroke();
+      const tx = x + imgW + 6 * u;
+      const tw = w - imgW - 12 * u;
+      const labelW2 = tw * 0.34;
+      doc.fields.forEach((fk, i) => {
+        const def = PHOTO_FIELDS[fk];
+        if (!def) return;
+        const yy = y + 6 * u + i * rowH;
+        if (yy + rowH > y + h) return;
+        if (i){ g.strokeStyle = '#DDE1E6'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(tx, yy); g.lineTo(tx + tw, yy); g.stroke(); }
+        this.text(g, def.label, tx, yy + 2.5 * u, 7.5 * u, true, '#5B6570', labelW2 - 6 * u);
+        this.font(g, 9 * u, false); g.fillStyle = '#14171A';
+        this.clip(g, def.get(it), tx + labelW2, yy + 2.5 * u, tw - labelW2);
+      });
+      return;
+    }
+
+    /* 4枚以上：上に写真、下に情報（面積効率を優先） */
     const capH = Math.min(h * 0.52, doc.fields.length * rowH + 4 * u);
     const imgH = h - capH - 8 * u;
-    const img = await loadImageAsync(it.meta.display_uri);
     if (img && img.width){
       const sc = Math.min((w - 10 * u) / img.width, imgH / img.height);
       const iw = img.width * sc, ih = img.height * sc;
@@ -9556,7 +9902,6 @@ const ReportPdf = {
       this.box(g, x + 5 * u, y + 5 * u, w - 10 * u, imgH, '#DDE1E6', '#F4F6F8');
       this.text(g, '（写真）', x + w / 2 - 14 * u, y + imgH / 2, 8 * u, false, '#B4BCC5');
     }
-    /* 説明欄：左に項目名、右に値。行の区切り線を引く */
     const ty = y + imgH + 8 * u;
     const labelW = w * 0.30;
     doc.fields.forEach((fk, i) => {
@@ -9570,6 +9915,36 @@ const ReportPdf = {
       this.font(g, 9 * u, false); g.fillStyle = '#14171A';
       this.clip(g, def.get(it), x + labelW, yy + 2.5 * u, w - labelW - 10 * u);
     });
+  },
+
+  /* 表紙（提出用） */
+  coverPage(doc){
+    const p = this.newPage('portrait');
+    if (!p.g) return null;
+    const g = p.g, u = p.u, k = p.k;
+    const W = p.cv.width, H = p.cv.height, M = 20 * k;
+    g.strokeStyle = '#14171A'; g.lineWidth = Math.max(2, 2.2 * u);
+    g.strokeRect(M * 0.6, M * 0.6, W - M * 1.2, H - M * 1.2);
+    g.textAlign = 'center';
+    this.font(g, 26 * u, true); g.fillStyle = '#14171A';
+    g.fillText(doc.title, W / 2, H * 0.26);
+    if (doc.subtitle){ this.font(g, 12 * u, false); g.fillStyle = '#5B6570';
+      g.fillText(doc.subtitle, W / 2, H * 0.26 + 40 * u); }
+    g.textAlign = 'left';
+    /* 工事情報の表 */
+    const rows = doc.header;
+    const tw = W - M * 2.6, tx = M * 1.3;
+    const rowH = 22 * u;
+    let ty = H * 0.44;
+    rows.forEach(r => {
+      g.strokeStyle = '#9AA4AE'; g.lineWidth = 1.2;
+      g.strokeRect(tx, ty, tw, rowH);
+      g.strokeRect(tx, ty, tw * 0.28, rowH);
+      this.text(g, r[0], tx + 6 * u, ty + 5.5 * u, 9.5 * u, true, '#5B6570');
+      this.text(g, r[1], tx + tw * 0.28 + 8 * u, ty + 5.5 * u, 10.5 * u, false, '#14171A', tw * 0.7 - 16 * u);
+      ty += rowH;
+    });
+    return { jpeg: canvasJpeg(p.cv, 0.9), w: p.cv.width, h: p.cv.height, mm: p.m };
   },
 
   tablePages(doc){
@@ -9651,6 +10026,74 @@ function loadImageAsync(uri){
     img.src = uri;
   });
 }
+
+/* ===================================================================
+ * 複数コンテンツ（表紙・写真・是正・ダメ帳・レイアウト）を1つに束ねる
+ *   PDF   : 全コンテンツのページを順に連結
+ *   Excel : 表と写真をシートとして連結（表紙・レイアウトはPDF側のみ）
+ * =================================================================== */
+const ReportBundle = {
+  async pdfPagesFor(doc){
+    if (!doc) return [];
+    if (doc.kind === 'cover'){ const p = ReportPdf.coverPage(doc); return p ? [p] : []; }
+    if (doc.kind === 'photo') return await ReportPdf.photoPages(doc);
+    if (doc.kind === 'layout'){
+      if (!doc.drawing) return [];
+      const r = await MarkupPdf.run(doc.drawing, {
+        allPages: doc.allPages, withList: false, returnPages: true,
+        layerIds: doc.layerIds || null
+      });
+      return (r && r.pages) || [];
+    }
+    return ReportPdf.tablePages(doc);       /* issue / doc の表 */
+  },
+  titleOf(docs){
+    const main = docs.find(d => d.kind !== 'cover');
+    return docs.length === 1 ? docs[0].title
+      : ((main ? main.title : '帳票') + 'ほか' + (docs.length - 1) + '件');
+  },
+  async pdf(docs){
+    const pages = [];
+    for (const d of docs) pages.push(...await this.pdfPagesFor(d));
+    if (!pages.length){ toast('出力できる内容がありません'); return null; }
+    const head = { title: this.titleOf(docs), project: docs[0].project };
+    const bytes = PDFOut.build(pages, { title: head.title });
+    const name = reportFileName(head, '.pdf');
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    download(name, blob);
+    deliverReport(head, name, blob);
+    Audit.log('report.pdf', head.title, pages.length + 'ページ（' + docs.length + 'コンテンツ）');
+    return name;
+  },
+  async xlsx(docs){
+    const sheets = [];
+    let skipped = 0;
+    const seen = {};
+    for (const d of docs){
+      let sp = null;
+      if (d.kind === 'photo') sp = ReportXlsx.photoSheet(d);
+      else if (d.kind === 'issue' || d.kind === 'doc') sp = ReportXlsx.tableSheet(d);
+      else { skipped++; continue; }
+      /* シート名は重複不可・31文字まで */
+      let nm = String(sp.name || 'Sheet').slice(0, 28);
+      if (seen[nm]) nm = nm.slice(0, 25) + ' (' + (++seen[nm]) + ')'; else seen[nm] = 1;
+      sp.name = nm;
+      sheets.push(sp);
+    }
+    if (!sheets.length){ toast('Excelにできるコンテンツ（写真・表）がありません。PDFで出力してください'); return null; }
+    const head = { title: this.titleOf(docs.filter(d => d.kind !== 'cover' && d.kind !== 'layout')),
+      project: docs[0].project };
+    const bytes = XLSX.build(sheets, { title: head.title, creator: State.me.name });
+    const name = reportFileName(head, '.xlsx');
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    download(name, blob);
+    deliverReport(head, name, blob);
+    if (skipped) toast('表紙とレイアウトはExcelに入れられないため、PDF出力に含めています', { ms: 4200 });
+    Audit.log('report.xlsx', head.title, sheets.length + 'シート');
+    return name;
+  }
+};
 
 /* ===================================================================
  * 出力3：CSV（Excelを持たない相手・システム取込用）
@@ -9816,7 +10259,9 @@ const MarkupPdf = {
 
     /* 2) 書き込み（表示中レイヤーのみ・このページのみ） */
     const layers = d.layers.slice().sort((a, b) => a.order - b.order)
-      .filter(l => l.visible && (!opt || !opt.layerIds || opt.layerIds.indexOf(l.id) >= 0));
+      /* レイヤー指定があれば、画面の表示状態に関係なくその指定を正とする（帳票の再現性） */
+      .filter(l => (opt && opt.layerIds && opt.layerIds.length)
+        ? opt.layerIds.indexOf(l.id) >= 0 : l.visible);
     layers.forEach(l => l.annotations.forEach(a => {
       if ((a.page || 0) !== page) return;
       if (a.type === 'pin') return;
@@ -10072,6 +10517,8 @@ const MarkupPdf = {
       pages.push({ jpeg: canvasJpeg(sh.cv, 0.86), w: sh.cv.width, h: sh.cv.height, mm: sh.mm });
     }
     if (!pages.length){ toast('この環境では画像を作れませんでした'); return null; }
+    /* 帳票の「レイアウト」コンテンツとして束ねるとき用：ページ画像だけ返す */
+    if (o.returnPages) return { pages, sheets };
     if (o.withList !== false){
       const lp = this.listPage(dw, sheets, pages[0].mm);
       if (lp) pages.push(lp);
@@ -10187,7 +10634,8 @@ const Home = {
 /* ---------- S2 図面一覧 ---------- */
 const DrawingList = {
   q: '',
-  folderId: null,        /* null = すべての図面。'__none__' = 未分類 */
+  folderId: null,        /* null = ルート。'__none__' = 未分類 */
+  disc: null,            /* 図種フィルタ（意匠図・構造図…）。null = 絞らない */
 
   /* フォルダを開く／出る。図面を開いて戻ってきても居場所は保つ */
   openFolder(id){
@@ -10204,16 +10652,36 @@ const DrawingList = {
     const f = (pj.folders || []).find(x => x.id === this.folderId);
     return f ? f.name : null;
   },
-  /* いま見えているべき図面（フォルダの絞り込みと検索を1か所で決める） */
+  /* いま見えているべき図面（フォルダ・図種・検索を1か所で決める） */
   visible(pj){
     const q = this.q.trim();
     return pj.drawings.filter(d => {
       if (d.published === false || d.doc_id) return false;   /* 書類のレビュー面は出さない */
       if (q) return d.name.includes(q) || (d.number || '').includes(q);   /* 検索中は現場全体から探す */
-      if (this.folderId === null) return true;
+      if (this.disc) return (d.discipline || '') === this.disc;  /* 図種はフォルダ横断で絞る */
+      if (this.folderId === null)
+        /* ルートはDrive風：フォルダがあるなら、フォルダ外（未分類）だけを図面として並べる */
+        return pj.folders.length ? !d.folder_id : true;
       if (this.folderId === '__none__') return !d.folder_id;
       return d.folder_id === this.folderId;
     });
+  },
+
+  /* 図種フィルタ（フォルダとは別軸。横断で絞り込む） */
+  renderDiscBar(host){
+    const list = Disciplines.list();
+    const used = new Set(P.project().drawings.map(d => d.discipline).filter(Boolean));
+    const bar = el('div', { class: 'filters', style: 'display:flex;padding:10px 12px 4px' });
+    const chip = (label, val) => {
+      const on = this.disc === val;
+      const b = el('button', { class: 'fchip' + (on ? ' on' : ''), text: label,
+        style: on ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '' });
+      b.addEventListener('click', () => { TapMeter.tap(); this.disc = val; this.render(); });
+      bar.appendChild(b);
+    };
+    chip('すべて', null);
+    list.forEach(name => chip(name + (used.has(name) ? '' : ''), name));
+    host.appendChild(bar);
   },
 
   render(){
@@ -10229,8 +10697,15 @@ const DrawingList = {
     this.renderResume(pj);
     const fl = $('#folderList'); fl.innerHTML = '';
     const q = this.q.trim();
-    const inFolder = this.folderId !== null && !q;
+    this.renderDiscBar(fl);
+    const filtering = !!this.disc && !q;
+    const inFolder = this.folderId !== null && !q && !filtering;
     const isDrawing = (d) => d.published !== false && !d.doc_id;
+
+    if (filtering){
+      fl.appendChild(el('div', { class: 'small', style: 'padding:2px 14px 8px;color:var(--fg-2)',
+        text: '図種「' + this.disc + '」で全フォルダから絞り込み中' }));
+    }
 
     if (inFolder){
       /* フォルダの中：どこにいるか／どこへ戻るかを1行で示す */
@@ -10262,9 +10737,20 @@ const DrawingList = {
         fl.appendChild(row);
       };
       pj.folders.forEach(f => rowFor(f.id, f.name, pj.drawings.filter(d => isDrawing(d) && d.folder_id === f.id).length));
-      /* どのフォルダにも入っていない図面がある場合だけ「未分類」を出す */
-      const none = pj.drawings.filter(d => isDrawing(d) && !d.folder_id).length;
-      if (none && pj.folders.length) rowFor('__none__', '未分類', none);
+      /* 任意のフォルダを現場から作れる（Driveと同じ操作感） */
+      if (Perm.can('folder.manage')){
+        const mk = el('div', { class: 'row folder-row', role: 'button', tabindex: '0' }, [
+          el('div', { class: 'foldericon', style: 'opacity:.55' }, [icon('plus', 22)]),
+          el('div', { class: 'grow' }, [el('div', { class: 't1', style: 'color:var(--fg-2)', text: 'フォルダを作成' })])
+        ]);
+        mk.addEventListener('click', () => {
+          const v = prompt('新しいフォルダの名前', '');
+          if (v === null || !v.trim()) return;
+          const f = Folders.create(pj.id, v.trim());
+          if (f){ toast('フォルダ「' + f.name + '」を作成しました'); this.render(); }
+        });
+        fl.appendChild(mk);
+      }
     }
 
     const dl = $('#dwgList'); dl.innerHTML = '';
@@ -10273,7 +10759,9 @@ const DrawingList = {
       dl.appendChild(el('div', { class: 'empty-rich' }, [
         el('div', { class: 'art' }, [icon('layer', 40)]),
         el('div', { class: 't', text: q ? '該当する図面がありません'
-          : inFolder ? 'このフォルダには図面がありません' : '図面がまだありません' }),
+          : filtering ? 'この図種の図面はありません'
+          : inFolder ? 'このフォルダには図面がありません'
+          : pj.folders.length ? 'フォルダの外に図面はありません' : '図面がまだありません' }),
         el('div', { class: 'd', text: q ? '図面名または図面番号で検索できます'
           : inFolder ? '管理コンソールの「図面・フォルダ」から、図面をこのフォルダへ移動できます'
           : 'PCの管理コンソールから図面を追加すると、ここに並びます' })
@@ -10410,7 +10898,21 @@ const DrawingList = {
     const folder = el('select');
     folder.appendChild(el('option', { value: '', text: '未分類' }));
     pj.folders.forEach(f => folder.appendChild(el('option', { value: f.id, text: f.name })));
-    if (pj.folders[0]) folder.value = pj.folders[0].id;
+
+    /* 図種：リスト選択＋その場で任意追加 */
+    const disc = el('select');
+    disc.appendChild(el('option', { value: '', text: '（指定しない）' }));
+    Disciplines.list().forEach(n => disc.appendChild(el('option', { value: n, text: n })));
+    disc.appendChild(el('option', { value: '__new__', text: '＋ 新しい図種を追加…' }));
+    disc.addEventListener('change', () => {
+      if (disc.value !== '__new__') return;
+      const v = prompt('新しい図種の名前', '');
+      if (v && v.trim() && Disciplines.add(v.trim())){
+        const opt = el('option', { value: v.trim(), text: v.trim() });
+        disc.insertBefore(opt, disc.lastChild);
+        disc.value = v.trim();
+      } else disc.value = '';
+    });
 
     const state = el('div', { class: 'small', text: '図面ファイル：未選択（サンプル平面図を作成します）' });
     const pick = el('button', { class: 'btn gh', style: 'width:100%', text: 'ファイルを選ぶ（PDF / PNG / JPG）' });
@@ -10432,6 +10934,7 @@ const DrawingList = {
     body.appendChild(el('div', { class: 'field' }, [el('label', { text: '図面名' }), name]));
     body.appendChild(el('div', { class: 'field' }, [el('label', { text: '図面番号（任意）' }), num]));
     body.appendChild(el('div', { class: 'field' }, [el('label', { text: 'フォルダ' }), folder]));
+    body.appendChild(el('div', { class: 'field' }, [el('label', { text: '図種' }), disc]));
     body.appendChild(el('div', { class: 'field' }, [pick, el('div', { style: 'height:8px' }), state]));
     body.appendChild(el('div', { class: 'hint',
       text: 'PDFは複数ページのまま取り込み、ページごとに書き込めます。'
@@ -10447,7 +10950,8 @@ const DrawingList = {
       const nm = name.value.trim() || ((imageUri || pdfFile) ? '新しい図面' : 'サンプル平面図');
       const d = Drawings.create(pj.id, {
         name: nm, number: num.value.trim(),
-        folder_id: folder.value || null, image_uri: imageUri, pdf: pdfFile
+        folder_id: folder.value || null, discipline: disc.value || '',
+        image_uri: imageUri, pdf: pdfFile
       });
       if (!d) return;
       Sheet.close();
@@ -10740,79 +11244,398 @@ const PhotoList = {
 
 /* ---------- S8 帳票（プレビュー → Excel / PDF / 印刷 / CSV） ---------- */
 const Report = {
-  tplId: null,
-  scope: {},            /* {drawingId, from, to, vendorId} */
+  /* 帳票＝「コンテンツの組み立て」。
+     決まったフォーマットから選ぶのではなく、表紙・写真・是正・ダメ帳・
+     レイアウト（マークアップ図面）・書類台帳を任意に足して1冊にする。
+     （例：レイアウト＋指摘一覧を同時に出す、といった現場の実需に合わせる） */
+  sections: null,
+  scope: {},            /* {drawingId, from, to, layerIds:[]} */
   exclude: {},          /* photoId -> true（外す） */
   order: [],
-  doc: null,
+  docs: [],
+  doc: null,            /* 互換：最初のコンテンツ */
+
+  SECTION_DEFS: {
+    cover:  { label: '表紙（提出用）' },
+    photo:  { label: '写真' },
+    fix:    { label: '指摘・是正項目' },
+    dame:   { label: 'ダメ帳（指摘一覧表）' },
+    layout: { label: 'レイアウト（マークアップ図面）' },
+    docs:   { label: '書類台帳' }
+  },
+  defaultSections(kind){
+    if (kind === 'dame' || kind === 'issue') return [{ id: uid('sec'), type: 'dame' }];
+    if (kind === 'doc') return [{ id: uid('sec'), type: 'docs' }];
+    return [{ id: uid('sec'), type: 'photo', perPage: 3,
+      fields: ['title', 'kindName', 'taken_at', 'taken_by', 'place'], group: 'drawing' }];
+  },
 
   open(kind){
     const pj = P.project(); if (!pj) return;
-    const tpls = reportTemplates(pj);
-    const cur = tpls.find(t => t.id === this.tplId);
-    if (kind === 'dame' || kind === 'issue') this.tplId = (tpls.find(t => t.kind === 'issue') || tpls[0]).id;
-    else if (kind === 'doc') this.tplId = (tpls.find(t => t.kind === 'doc') || tpls[0]).id;
-    else if (!cur || cur.kind !== 'photo') this.tplId = (tpls.find(t => t.kind === 'photo') || tpls[0]).id;
+    /* 前回の組み立てを現場から復元。呼び出し元の意図（写真／ダメ帳／書類）が
+       今の組み立てに入っていなければ、その1コンテンツで始める */
+    if (!this.sections)
+      this.sections = (pj.report_comp && pj.report_comp.length)
+        ? JSON.parse(JSON.stringify(pj.report_comp)) : null;
+    const wants = kind === 'dame' || kind === 'issue' ? 'dame' : kind === 'doc' ? 'docs' : 'photo';
+    if (!this.sections || !this.sections.some(x => x.type === wants ||
+        (wants === 'photo' && (x.type === 'photo' || x.type === 'fix'))))
+      this.sections = this.defaultSections(kind);
     if (this.scope.drawingId === undefined && Viewer.drawing && !Viewer.drawing.doc_id)
       this.scope.drawingId = Viewer.drawing.id;
     $('#modalReport').classList.add('on');
     this.build();
   },
   close(){ $('#modalReport').classList.remove('on'); },
+  persist(){
+    const pj = P.project(); if (!pj) return;
+    pj.report_comp = JSON.parse(JSON.stringify(this.sections));
+    Store.scheduleSave();
+    Sync.markDirty('report.comp');
+  },
 
-  /* ---------- 設定バー ---------- */
+  /* ---------- 設定バー（帳票全体にかかる絞り込み） ---------- */
   renderBar(){
     const pj = P.project();
     const bar = $('#repBar'); bar.innerHTML = '';
-    const tpl = reportTemplate(this.tplId, pj);
 
-    const sel = el('select', { class: 'repsel', 'aria-label': '帳票の種類' });
-    reportTemplates(pj).forEach(t => sel.appendChild(el('option', { value: t.id, text: t.name })));
-    sel.value = tpl.id;
-    sel.addEventListener('change', () => { this.tplId = sel.value; this.exclude = {}; this.order = []; this.build(); });
-    bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '帳票' }), sel]));
+    /* コンテンツを足す */
+    const addBtn = el('button', { class: 'btn pri sm', text: '＋ コンテンツを追加' });
+    addBtn.addEventListener('click', () => this.addMenu());
+    bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '組み立て' }), addBtn]));
 
-    if (tpl.kind === 'photo'){
-      const seg = el('div', { class: 'seg small' });
-      [1, 2, 3, 4, 6].forEach(n => {
-        const b = el('button', { class: tpl.perPage === n ? 'on' : '', text: n + '枚' });
-        b.addEventListener('click', () => { tpl.perPage = n; Store.scheduleSave(); this.build(); });
-        seg.appendChild(b);
-      });
-      bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '1ページの枚数' }), seg]));
-    }
-
+    /* 対象図面 */
     const dsel = el('select', { class: 'repsel', 'aria-label': '対象' });
     dsel.appendChild(el('option', { value: '', text: '現場全体' }));
     pj.drawings.filter(d => !d.doc_id).forEach(d => dsel.appendChild(el('option', { value: d.id, text: d.name })));
     dsel.value = this.scope.drawingId || '';
-    dsel.addEventListener('change', () => { this.scope.drawingId = dsel.value || null; this.build(); });
+    dsel.addEventListener('change', () => {
+      this.scope.drawingId = dsel.value || null;
+      this.scope.layerIds = [];                 /* 図面が変わればレイヤーも変わる */
+      this.build();
+    });
     bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '対象' }), dsel]));
 
-    if (tpl.kind === 'photo'){
-      const from = el('input', { type: 'date', class: 'repsel', value: this.scope.from || '' });
-      const to = el('input', { type: 'date', class: 'repsel', value: this.scope.to || '' });
-      from.addEventListener('change', () => { this.scope.from = from.value; this.build(); });
-      to.addEventListener('change', () => { this.scope.to = to.value; this.build(); });
-      bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '撮影期間' }),
-        el('div', { style: 'display:flex;gap:4px;align-items:center' }, [from, el('span', { text: '〜' }), to])]));
-      const fbtn = el('button', { class: 'btn gh sm', text: '⚙ 記載項目' });
-      fbtn.addEventListener('click', () => this.fieldsDialog(tpl));
-      bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: 'テンプレート' }), fbtn]));
+    /* 期間 */
+    const from = el('input', { type: 'date', class: 'repsel', value: this.scope.from || '' });
+    const to = el('input', { type: 'date', class: 'repsel', value: this.scope.to || '' });
+    from.addEventListener('change', () => { this.scope.from = from.value; this.build(); });
+    to.addEventListener('change', () => { this.scope.to = to.value; this.build(); });
+    bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: '撮影期間' }),
+      el('div', { style: 'display:flex;gap:4px;align-items:center' }, [from, el('span', { text: '〜' }), to])]));
+
+    /* レイヤー絞り込み（対象図面を選んだときに、その図面のレイヤーで絞る） */
+    const wrap = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' });
+    const dSel = this.scope.drawingId && pj.drawings.find(d => d.id === this.scope.drawingId);
+    if (dSel){
+      const cur = this.scope.layerIds || [];
+      dSel.layers.forEach(l => {
+        const on = cur.indexOf(l.id) >= 0;
+        const b = el('button', { class: 'fchip' + (on ? ' on' : ''),
+          style: on ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '',
+          text: (l.scope === 'merged' ? '合成 ' : '') + l.name });
+        b.addEventListener('click', () => {
+          const list = (this.scope.layerIds || []).slice();
+          const i = list.indexOf(l.id);
+          if (i >= 0) list.splice(i, 1); else list.push(l.id);
+          this.scope.layerIds = list;
+          this.build();
+        });
+        wrap.appendChild(b);
+      });
+      if (cur.length){
+        const clr = el('button', { class: 'btn gh sm', text: '解除' });
+        clr.addEventListener('click', () => { this.scope.layerIds = []; this.build(); });
+        wrap.appendChild(clr);
+      }
+    } else {
+      wrap.appendChild(el('span', { class: 'small', style: 'color:var(--fg-2)',
+        text: '対象で図面を選ぶと、レイヤーで絞り込めます' }));
     }
+    bar.appendChild(el('div', { class: 'repfield' }, [el('label', { text: 'レイヤー' }), wrap]));
   },
 
-  /* 記載項目の事前定義（テンプレートに保存する） */
-  fieldsDialog(tpl){
+  addMenu(){
+    const items = Object.keys(this.SECTION_DEFS).map(type => ({
+      label: this.SECTION_DEFS[type].label,
+      fn: () => {
+        const sec = { id: uid('sec'), type };
+        if (type === 'photo'){ sec.perPage = 3; sec.fields = ['title', 'kindName', 'taken_at', 'taken_by', 'place']; sec.group = 'drawing'; }
+        if (type === 'fix'){ sec.perPage = 2; sec.fields = ['title', 'kindName', 'taken_at', 'vendor', 'due', 'status']; sec.group = 'vendor'; }
+        if (type === 'layout'){ sec.drawingId = this.scope.drawingId || null; sec.allPages = false; }
+        if (type === 'cover'){ sec.title = '工事写真帳'; }
+        /* 表紙は先頭へ、それ以外は末尾へ */
+        if (type === 'cover') this.sections.unshift(sec); else this.sections.push(sec);
+        this.persist(); this.build();
+      }
+    }));
+    Menu.open('コンテンツを追加', items);
+  },
+
+  /* ---------- 帳票データを組み立てる ---------- */
+  buildDocs(){
+    const base = { drawingId: this.scope.drawingId, from: this.scope.from, to: this.scope.to,
+      layerIds: this.scope.layerIds, exclude: this.exclude, order: this.order };
+    this.docs = this.sections.map(sec => {
+      if (sec.type === 'cover')
+        return ReportData.buildCover({ title: sec.title || '工事写真帳' });
+      if (sec.type === 'layout')
+        return ReportData.buildLayout({ drawingId: sec.drawingId || this.scope.drawingId,
+          allPages: !!sec.allPages, layerIds: this.scope.layerIds });
+      if (sec.type === 'dame')
+        return ReportData.build({ kind: 'issue', name: '指摘一覧（ダメ帳）', perPage: 0,
+          orientation: 'landscape', fields: [], group: 'none', sort: 'due' }, base);
+      if (sec.type === 'docs')
+        return ReportData.build({ kind: 'doc', name: '書類台帳', perPage: 0,
+          orientation: 'landscape', fields: [], group: 'none', sort: 'due' }, base);
+      const isFix = sec.type === 'fix';
+      return ReportData.build({
+        kind: 'photo', name: isFix ? '是正報告書' : '工事写真帳',
+        perPage: sec.perPage || (isFix ? 2 : 3), orientation: 'portrait',
+        fields: (sec.fields && sec.fields.length) ? sec.fields : ['title', 'taken_at', 'taken_by'],
+        group: sec.group || 'drawing', sort: 'taken_at', only: isFix ? 'issue' : undefined
+      }, base);
+    }).filter(Boolean);
+    this.doc = this.docs[0] || null;
+  },
+
+  /* ---------- プレビュー ---------- */
+  build(){
+    const pj = P.project(); if (!pj) return;
+    this.renderBar();
+    this.buildDocs();
+    const body = $('#repBody'); body.innerHTML = '';
+    let nPhotos = 0, nPages = 0;
+
+    this.sections.forEach((sec, si) => {
+      const doc = this.docs[si];
+      body.appendChild(this.sectionHeader(sec, si, doc));
+      if (!doc) return;
+      if (doc.kind === 'cover'){ body.appendChild(this.renderCover(doc)); nPages++; }
+      else if (doc.kind === 'photo'){
+        const pages = paginatePhotos(doc);
+        nPhotos += doc.photos.length; nPages += pages.length;
+        this.renderPhotoDoc(body, doc, pages);
+      }
+      else if (doc.kind === 'layout'){ body.appendChild(this.renderLayout(sec, doc)); nPages++; }
+      else { nPages++; this.renderTableDoc(body, doc); }
+    });
+
+    const off = Object.keys(this.exclude);
+    if (off.length){
+      const back = el('button', { class: 'btn gh', style: 'margin:8px auto;display:block',
+        text: '除外した ' + off.length + ' 枚を戻す' });
+      back.addEventListener('click', () => { this.exclude = {}; this.build(); });
+      body.appendChild(back);
+    }
+    $('#repMeta').textContent = 'コンテンツ ' + this.sections.length + '件 ・ 約' + nPages + 'ページ'
+      + (nPhotos ? ' ・ 写真 ' + nPhotos + '枚' : '');
+  },
+
+  sectionHeader(sec, si, doc){
+    const def = this.SECTION_DEFS[sec.type] || { label: sec.type };
+    const left = el('div', { class: 'rep-sec-t' }, [
+      el('b', { text: (si + 1) + '. ' + def.label }),
+      el('span', { class: 'small', text: doc && doc.kind === 'photo' ? doc.photos.length + '枚' : '' })
+    ]);
+    const ctl = el('div', { class: 'rep-sec-c' });
+    /* コンテンツごとの設定 */
+    if (sec.type === 'photo' || sec.type === 'fix'){
+      const seg = el('div', { class: 'seg small' });
+      [1, 2, 3, 4, 6].forEach(n => {
+        const b = el('button', { class: (sec.perPage || 3) === n ? 'on' : '', text: n + '枚' });
+        b.addEventListener('click', () => { sec.perPage = n; this.persist(); this.build(); });
+        seg.appendChild(b);
+      });
+      ctl.appendChild(seg);
+      const fbtn = el('button', { class: 'btn gh sm', text: '記載項目' });
+      fbtn.addEventListener('click', () => this.fieldsDialog(sec));
+      ctl.appendChild(fbtn);
+    }
+    if (sec.type === 'layout'){
+      const pj = P.project();
+      const dsel = el('select', { class: 'repsel' });
+      pj.drawings.filter(d => !d.doc_id).forEach(d =>
+        dsel.appendChild(el('option', { value: d.id, text: d.name })));
+      if (sec.drawingId) dsel.value = sec.drawingId;
+      dsel.addEventListener('change', () => { sec.drawingId = dsel.value; this.persist(); this.build(); });
+      ctl.appendChild(dsel);
+      const all = el('button', { class: 'btn gh sm' + (sec.allPages ? ' on' : ''),
+        text: sec.allPages ? '全ページ' : '表示ページのみ' });
+      all.addEventListener('click', () => { sec.allPages = !sec.allPages; this.persist(); this.build(); });
+      ctl.appendChild(all);
+    }
+    if (sec.type === 'cover'){
+      const tbtn = el('button', { class: 'btn gh sm', text: 'タイトル変更' });
+      tbtn.addEventListener('click', () => {
+        const v = prompt('表紙のタイトル', sec.title || '工事写真帳');
+        if (v !== null){ sec.title = v.trim() || sec.title; this.persist(); this.build(); }
+      });
+      ctl.appendChild(tbtn);
+    }
+    /* 並べ替え・削除 */
+    const up = el('button', { class: 'btn gh sm', text: '↑' });
+    const dn = el('button', { class: 'btn gh sm', text: '↓' });
+    const rm = el('button', { class: 'btn gh sm dan', text: '✕' });
+    up.addEventListener('click', () => { if (si > 0){ this.sections.splice(si - 1, 0, this.sections.splice(si, 1)[0]); this.persist(); this.build(); } });
+    dn.addEventListener('click', () => { if (si < this.sections.length - 1){ this.sections.splice(si + 1, 0, this.sections.splice(si, 1)[0]); this.persist(); this.build(); } });
+    rm.addEventListener('click', () => { this.sections.splice(si, 1); this.persist(); this.build(); });
+    ctl.appendChild(up); ctl.appendChild(dn); ctl.appendChild(rm);
+    return el('div', { class: 'rep-sec' }, [left, ctl]);
+  },
+
+  renderCover(doc){
+    const page = el('div', { class: 'reportpage rp-cover' });
+    page.appendChild(el('div', { class: 'cv-t', text: doc.title }));
+    const tbl = el('table', { class: 'dame cv-tbl' });
+    tbl.innerHTML = doc.header.map(h =>
+      '<tr><th style="width:30%">' + esc(h[0]) + '</th><td>' + esc(h[1]) + '</td></tr>').join('');
+    page.appendChild(tbl);
+    return page;
+  },
+  renderLayout(sec, doc){
+    const page = el('div', { class: 'reportpage land rp-layout' });
+    page.appendChild(el('div', { class: 'rp-head' }, [
+      el('div', { class: 'rp-title', text: doc.title })]));
+    const n = doc.drawing && doc.drawing.pdf ? doc.drawing.pdf.pages.length : 1;
+    const lys = (this.scope.layerIds && this.scope.layerIds.length)
+      ? 'レイヤー ' + this.scope.layerIds.length + '枚に絞り込み' : '表示中の全レイヤー';
+    page.appendChild(el('div', { class: 'rp-layout-ph' }, [
+      icon('layer', 34),
+      el('div', { text: doc.drawing ? (doc.drawing.name + '（' + (sec.allPages ? '全' + n + 'ページ' : '表示ページ') + '・' + lys + '）') : '図面がありません' }),
+      el('div', { class: 'small', text: '書き込み付きの図面は PDF 出力時にこの位置に入ります' })
+    ]));
+    return page;
+  },
+  renderTableDoc(body, doc){
+    const page = el('div', { class: 'reportpage land' });
+    page.appendChild(el('div', { class: 'rp-head' }, [
+      el('div', { class: 'rp-title', text: doc.title }),
+      el('div', { class: 'rp-meta', text: doc.header.slice(0, 2).map(h => h[0] + '：' + h[1]).join('　') }),
+      el('div', { class: 'rp-meta', text: doc.header.slice(-2).map(h => h[0] + '：' + h[1]).join('　') })
+    ]));
+    const t = el('table', { class: 'dame' });
+    t.innerHTML = '<tr>' + doc.columns.map(c => '<th>' + esc(c.label) + '</th>').join('') + '</tr>' +
+      doc.rows.map(r => '<tr>' + doc.columns.map(c =>
+        '<td>' + esc(r[c.key] === undefined ? '' : r[c.key]) + '</td>').join('') + '</tr>').join('');
+    page.appendChild(t);
+    body.appendChild(page);
+  },
+  renderPhotoDoc(body, doc, pages){
+    if (!doc.photos.length){
+      body.appendChild(el('div', { class: 'empty-rich' }, [
+        el('div', { class: 'art' }, [icon('camera', 40)]),
+        el('div', { class: 't', text: '対象の写真がありません' }),
+        el('div', { class: 'd', text: '対象・期間・レイヤーを広げるか、現場で写真を撮ってからお試しください' })
+      ]));
+      return;
+    }
+    const horiz = doc.perPage <= 3;                     /* 3枚以下＝左に写真・右に情報 */
+    const cols = horiz ? 1 : 2;
+    pages.forEach((pg, pi) => {
+      const page = el('div', { class: 'reportpage' + (doc.orientation === 'landscape' ? ' land' : '') });
+      page.appendChild(el('div', { class: 'rp-head' }, [
+        el('div', { class: 'rp-title', text: doc.title }),
+        el('div', { class: 'rp-meta', text: doc.header.slice(0, 2).map(h => h[0] + '：' + h[1]).join('　') }),
+        el('div', { class: 'rp-meta', text: doc.header.slice(-2).map(h => h[0] + '：' + h[1]).join('　') })
+      ]));
+      if (pg.group) page.appendChild(el('div', { class: 'rp-grp', text: pg.group }));
+      const grid = el('div', { class: 'rp-grid', style: 'grid-template-columns:repeat(' + cols + ',1fr)' });
+      pg.items.forEach(it => {
+        const img = el('img', { src: it.meta.display_uri, alt: it.caption, draggable: 'false' });
+        const kv = el('div', { class: 'rp-kvs' });
+        doc.fields.forEach(f => kv.appendChild(el('div', { class: 'rp-kv' }, [
+          el('b', { text: PHOTO_FIELDS[f].label }), el('span', { text: PHOTO_FIELDS[f].get(it) })
+        ])));
+        const cell = el('div', { class: 'rp-cell' + (horiz ? ' h' : ''), 'data-pid': it.id },
+          horiz ? [img, kv] : [img, kv]);
+        const bar = el('div', { class: 'rp-act' }, [
+          el('button', { class: 'btn gh sm', text: '除外' }),
+          el('button', { class: 'btn gh sm', text: '▲' }),
+          el('button', { class: 'btn gh sm', text: '▼' })
+        ]);
+        const [bOff, bUp, bDn] = bar.querySelectorAll('button');
+        bOff.addEventListener('click', () => { this.exclude[it.id] = true; this.build(); });
+        bUp.addEventListener('click', () => { this.move(it.id, -1); this.build(); });
+        bDn.addEventListener('click', () => { this.move(it.id, 1); this.build(); });
+        cell.appendChild(bar);
+        this.attachDrag(img, it.id);
+        grid.appendChild(cell);
+      });
+      page.appendChild(grid);
+      page.appendChild(el('div', { class: 'rp-foot', text: (pi + 1) + ' / ' + pages.length }));
+      body.appendChild(page);
+    });
+  },
+
+  /* ---------- 並べ替え（ドラッグ＆ドロップ＋▲▼） ---------- */
+  ensureOrder(){
+    if (this.order.length) return;
+    const pd = this.docs.find(d => d && d.kind === 'photo');
+    if (pd) this.order = pd.photos.map(p => p.id);
+  },
+  move(pid, dir){
+    this.ensureOrder();
+    const i = this.order.indexOf(pid);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= this.order.length) return;
+    this.order.splice(j, 0, this.order.splice(i, 1)[0]);
+  },
+  reorder(srcId, dstId){
+    this.ensureOrder();
+    const i = this.order.indexOf(srcId), j = this.order.indexOf(dstId);
+    if (i < 0 || j < 0 || srcId === dstId) return;
+    this.order.splice(i, 1);
+    this.order.splice(this.order.indexOf(dstId) + (i < j ? 1 : 0), 0, srcId);
+  },
+  /* 写真をつまんで別の写真の位置へ落とす。指でもマウスでも同じ動き */
+  attachDrag(img, pid){
+    img.style.touchAction = 'none';
+    img.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const start = { x: e.clientX, y: e.clientY };
+      let ghost = null, over = null;
+      const move = (ev) => {
+        if (!ghost){
+          if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 8) return;
+          ghost = img.cloneNode();
+          ghost.className = 'rp-ghost';
+          document.body.appendChild(ghost);
+          const src = img.closest('.rp-cell');
+          if (src) src.classList.add('dragsrc');
+        }
+        ghost.style.left = ev.clientX + 'px';
+        ghost.style.top = ev.clientY + 'px';
+        const cell = (document.elementsFromPoint(ev.clientX, ev.clientY) || [])
+          .find(n => n.classList && n.classList.contains('rp-cell') && n.dataset.pid && n.dataset.pid !== pid);
+        if (over && over !== cell) over.classList.remove('drophint');
+        over = cell || null;
+        if (over) over.classList.add('drophint');
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        if (ghost) ghost.remove();
+        document.querySelectorAll('.rp-cell.dragsrc,.rp-cell.drophint')
+          .forEach(n => n.classList.remove('dragsrc', 'drophint'));
+        if (over){ this.reorder(pid, over.dataset.pid); this.build(); }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+  },
+
+  /* 記載項目（コンテンツごとに保存） */
+  fieldsDialog(sec){
     const body = $('#conflictBody'); body.innerHTML = '';
-    $('#sheetConflict').querySelector('h2').textContent = '帳票テンプレートの設定';
-    const name = el('input', { type: 'text', value: tpl.name });
-    body.appendChild(el('div', { class: 'field' }, [el('label', { text: '帳票名' }), name]));
+    $('#sheetConflict').querySelector('h2').textContent = '記載項目';
     const list = el('div', { class: 'field' }, [el('label', { text: '写真1枚ごとに載せる項目（上から順に出ます）' })]);
     const boxes = {};
     PHOTO_FIELD_KEYS.forEach(k => {
       const cb = el('input', { type: 'checkbox' });
-      cb.checked = tpl.fields.indexOf(k) >= 0;
+      cb.checked = (sec.fields || []).indexOf(k) >= 0;
       boxes[k] = cb;
       list.appendChild(el('label', { class: 'chk' }, [cb, el('span', { text: PHOTO_FIELDS[k].label })]));
     });
@@ -10820,124 +11643,49 @@ const Report = {
     const grp = el('select');
     [['none', 'まとめない'], ['drawing', '図面ごとにページを改める'], ['vendor', '業者ごとにページを改める']]
       .forEach(o => grp.appendChild(el('option', { value: o[0], text: o[1] })));
-    grp.value = tpl.group || 'none';
+    grp.value = sec.group || 'none';
     body.appendChild(el('div', { class: 'field' }, [el('label', { text: 'まとめ方' }), grp]));
     const bar = el('div', { class: 'field', style: 'display:flex;gap:8px' }, [
       el('button', { class: 'btn gh wide', text: 'キャンセル' }),
       el('button', { class: 'btn pri wide', text: '保存' })
     ]);
-    const [c, ok] = bar.querySelectorAll('button');
+    const [c, okB] = bar.querySelectorAll('button');
     c.addEventListener('click', () => Sheet.close());
-    ok.addEventListener('click', () => {
-      tpl.name = name.value.trim() || tpl.name;
-      tpl.fields = PHOTO_FIELD_KEYS.filter(k => boxes[k].checked);
-      if (!tpl.fields.length) tpl.fields = ['title'];
-      tpl.group = grp.value;
-      Store.scheduleSave();
+    okB.addEventListener('click', () => {
+      sec.fields = PHOTO_FIELD_KEYS.filter(k => boxes[k].checked);
+      if (!sec.fields.length) sec.fields = ['title'];
+      sec.group = grp.value;
+      this.persist();
       Sheet.close(); this.build();
-      toast('テンプレートを保存しました。次回もこの体裁で出ます');
+      toast('記載項目を保存しました。次回もこの体裁で出ます');
     });
     body.appendChild(bar);
     Sheet.open('sheetConflict', 'full');
   },
 
-  /* ---------- プレビュー ---------- */
-  build(){
-    const pj = P.project(); if (!pj) return;
-    this.renderBar();
-    this.doc = ReportData.build(this.tplId, Object.assign({}, this.scope, { exclude: this.exclude, order: this.order }));
-    const doc = this.doc;
-    const body = $('#repBody'); body.innerHTML = '';
-
-    if (doc.kind === 'photo'){
-      const pages = paginatePhotos(doc);
-      $('#repMeta').textContent = doc.photos.length + '枚 / ' + pages.length + 'ページ（' + doc.perPage + '枚ずつ）';
-      if (!doc.photos.length){
-        body.appendChild(el('div', { class: 'empty-rich' }, [
-          el('div', { class: 'art' }, [icon('camera', 40)]),
-          el('div', { class: 't', text: '対象の写真がありません' }),
-          el('div', { class: 'd', text: '対象や期間を広げるか、現場で写真を撮ってからお試しください' })
-        ]));
-      }
-      const cols = doc.perPage >= 6 ? 2 : (doc.perPage === 4 ? 2 : 1);
-      pages.forEach((pg, pi) => {
-        const page = el('div', { class: 'reportpage' + (doc.orientation === 'landscape' ? ' land' : '') });
-        page.appendChild(el('div', { class: 'rp-head' }, [
-          el('div', { class: 'rp-title', text: doc.title }),
-          el('div', { class: 'rp-meta', text: doc.header.slice(0, 2).map(h => h[0] + '：' + h[1]).join('　') }),
-          el('div', { class: 'rp-meta', text: doc.header.slice(-2).map(h => h[0] + '：' + h[1]).join('　') })
-        ]));
-        if (pg.group) page.appendChild(el('div', { class: 'rp-grp', text: pg.group }));
-        const grid = el('div', { class: 'rp-grid', style: 'grid-template-columns:repeat(' + cols + ',1fr)' });
-        pg.items.forEach(it => {
-          const cell = el('div', { class: 'rp-cell' }, [el('img', { src: it.meta.display_uri, alt: it.caption })]);
-          doc.fields.forEach(f => cell.appendChild(el('div', { class: 'rp-kv' }, [
-            el('b', { text: PHOTO_FIELDS[f].label }), el('span', { text: PHOTO_FIELDS[f].get(it) })
-          ])));
-          const bar = el('div', { class: 'rp-act' }, [
-            el('button', { class: 'btn gh sm', text: '除外' }),
-            el('button', { class: 'btn gh sm', text: '▲' }),
-            el('button', { class: 'btn gh sm', text: '▼' })
-          ]);
-          const [bOff, bUp, bDn] = bar.querySelectorAll('button');
-          bOff.addEventListener('click', () => { this.exclude[it.id] = true; this.build(); });
-          bUp.addEventListener('click', () => { this.move(it.id, -1); this.build(); });
-          bDn.addEventListener('click', () => { this.move(it.id, 1); this.build(); });
-          cell.appendChild(bar);
-          grid.appendChild(cell);
-        });
-        page.appendChild(grid);
-        page.appendChild(el('div', { class: 'rp-foot', text: (pi + 1) + ' / ' + pages.length }));
-        body.appendChild(page);
-      });
-      const off = Object.keys(this.exclude);
-      if (off.length){
-        const back = el('button', { class: 'btn gh', style: 'margin:8px auto;display:block', text: '除外した ' + off.length + ' 枚を戻す' });
-        back.addEventListener('click', () => { this.exclude = {}; this.build(); });
-        body.appendChild(back);
-      }
-    } else {
-      $('#repMeta').textContent = doc.rows.length + '件';
-      const page = el('div', { class: 'reportpage land' });
-      page.appendChild(el('div', { class: 'rp-head' }, [
-        el('div', { class: 'rp-title', text: doc.title }),
-        el('div', { class: 'rp-meta', text: doc.header.slice(0, 2).map(h => h[0] + '：' + h[1]).join('　') }),
-        el('div', { class: 'rp-meta', text: doc.header.slice(-2).map(h => h[0] + '：' + h[1]).join('　') })
-      ]));
-      const t = el('table', { class: 'dame' });
-      t.innerHTML = '<tr>' + doc.columns.map(c => '<th>' + esc(c.label) + '</th>').join('') + '</tr>' +
-        doc.rows.map(r => '<tr>' + doc.columns.map(c =>
-          '<td>' + esc(r[c.key] === undefined ? '' : r[c.key]) + '</td>').join('') + '</tr>').join('');
-      page.appendChild(t);
-      body.appendChild(page);
-    }
-  },
-  move(pid, dir){
-    if (!this.order.length) this.order = this.doc.photos.map(p => p.id);
-    const i = this.order.indexOf(pid);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= this.order.length) return;
-    this.order.splice(j, 0, this.order.splice(i, 1)[0]);
-  },
-
   /* ---------- 出力 ---------- */
   async out(fmt){
-    if (!this.doc) this.build();
+    if (!this.docs.length) this.build();
     TapMeter.tap();
-    const doc = this.doc;
     try {
-      if (fmt === 'xlsx') await ReportXlsx.run(doc);
-      else if (fmt === 'pdf') await ReportPdf.run(doc);
-      else if (fmt === 'csv') ReportCsv.run(doc);
-      else if (fmt === 'print') ReportHtml.print(doc);
-      else ReportHtml.run(doc);
+      if (fmt === 'xlsx') await ReportBundle.xlsx(this.docs);
+      else if (fmt === 'pdf') await ReportBundle.pdf(this.docs);
+      else if (fmt === 'csv'){
+        const t = this.docs.find(d => d.kind === 'issue' || d.kind === 'doc');
+        if (!t){ toast('CSVにできる表（ダメ帳・書類台帳）がありません'); return; }
+        ReportCsv.run(t);
+      }
+      else if (fmt === 'print' || fmt === 'html'){
+        if (this.docs.length !== 1){ toast('複数コンテンツはPDFで出力して印刷してください'); return; }
+        if (fmt === 'print') ReportHtml.print(this.docs[0]); else ReportHtml.run(this.docs[0]);
+      }
     } catch(e){
       console.error(e);
       toast('出力に失敗しました：' + ((e && e.message) || e), { ms: 4000 });
       return;
     }
     TapMeter.finish('report');
-    Dev.log('帳票出力（' + fmt + '）：' + doc.title);
+    Dev.log('帳票出力（' + fmt + '）：' + this.docs.map(d => d.title).join(' / '));
   },
   export(){ this.out('xlsx'); }
 };
@@ -11175,6 +11923,9 @@ const Camera = {
   shots: [],           /* このセッションで撮った photoId */
   stream: null,
   bb: false,
+  /* 撮影コントロール（現場からの要望：ズーム・フラッシュ・イン/アウト・連写） */
+  facing: 'environment', zoom: 1, torchOn: false, burst: false,
+  nativeZoom: false, _burstTimer: null,
 
   async open(anno, layer, provisional){
     this.anno = anno; this.layer = layer; this.provisional = !!provisional;
@@ -11189,9 +11940,10 @@ const Camera = {
     const v = $('#camVideo'), fake = $('#camFake');
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && location.protocol !== 'file:'){
-        this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this.facing }, audio: false });
         v.srcObject = this.stream; v.style.display = 'block'; fake.style.display = 'none';
-        Dev.log('カメラを起動（実機のカメラ入力）');
+        this.applyCtl();
+        Dev.log('カメラを起動（実機のカメラ入力・' + (this.facing === 'user' ? 'イン' : 'アウト') + '）');
         return;
       }
     } catch(e){ Dev.log('カメラ利用不可（' + e.name + '）→ 模擬ビューファインダに切替'); }
@@ -11242,14 +11994,72 @@ const Camera = {
     });
   },
 
+  /* ---- 撮影コントロール ---- */
+  track(){ return (this.stream && this.stream.getVideoTracks()[0]) || null; },
+  caps(){
+    const t = this.track();
+    try { return (t && t.getCapabilities) ? (t.getCapabilities() || {}) : {}; } catch(_){ return {}; }
+  },
+  /* 端末が対応していればカメラ本体のズーム／フラッシュ。無ければデジタルで代替 */
+  applyCtl(){
+    const t = this.track(), caps = this.caps(), v = $('#camVideo');
+    this.nativeZoom = !!(caps.zoom && Number(caps.zoom.max) >= 2);
+    if (t && this.nativeZoom){
+      t.applyConstraints({ advanced: [{ zoom: Math.min(this.zoom, caps.zoom.max) }] }).catch(() => {});
+      v.style.transform = (this.facing === 'user') ? 'scaleX(-1)' : '';
+    } else {
+      /* デジタルズーム：プレビューは拡大表示、保存時は中央を切り出す */
+      v.style.transform = (this.facing === 'user' ? 'scaleX(-1) ' : '')
+        + (this.zoom > 1 ? 'scale(' + this.zoom + ')' : '');
+    }
+    if (t && caps.torch) t.applyConstraints({ advanced: [{ torch: this.torchOn }] }).catch(() => {});
+    const zb = $('#camZoomBtn'), tb = $('#camTorchBtn'), bb = $('#camBurstBtn');
+    if (zb) zb.textContent = this.zoom + '×';
+    if (tb){ tb.classList.toggle('on', this.torchOn); tb.disabled = !(caps.torch); }
+    if (bb) bb.classList.toggle('on', this.burst);
+  },
+  flip(){
+    this.facing = this.facing === 'environment' ? 'user' : 'environment';
+    this.torchOn = false;              /* インカメラにフラッシュは無い */
+    this.stopStream();
+    this.startStream();
+  },
+  zoomCycle(){
+    const seq = [1, 2, 4];
+    this.zoom = seq[(seq.indexOf(this.zoom) + 1) % seq.length];
+    this.applyCtl();
+  },
+  toggleTorch(){
+    if (!this.caps().torch){ toast('この端末・カメラはフラッシュ制御に対応していません'); return; }
+    this.torchOn = !this.torchOn;
+    this.applyCtl();
+  },
+  toggleBurst(){
+    this.burst = !this.burst;
+    this.applyCtl();
+    toast(this.burst ? '連写モード：シャッターを押している間、連続で撮影します'
+                     : '連写モードを解除しました', { ms: 3000 });
+  },
+  /* 連写：シャッターの押しっぱなしで一定間隔で撮る */
+  burstStart(){
+    if (!this.burst || this._burstTimer) return;
+    this._burstTimer = setInterval(() => this.shoot(), 650);
+  },
+  burstEnd(){
+    clearInterval(this._burstTimer); this._burstTimer = null;
+  },
+
   async shoot(){
     TapMeter.tap();
     let photoId;
     const v = $('#camVideo');
     if (this.stream && v.videoWidth){
       const c = document.createElement('canvas');
-      c.width = v.videoWidth; c.height = v.videoHeight;
-      c.getContext('2d').drawImage(v, 0, 0);
+      const z = (!this.nativeZoom && this.zoom > 1) ? this.zoom : 1;
+      const sw = v.videoWidth / z, sh = v.videoHeight / z;
+      c.width = Math.round(sw); c.height = Math.round(sh);
+      c.getContext('2d').drawImage(v,
+        (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, 0, 0, c.width, c.height);
       const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
       photoId = await PhotoStore.ingestBlob(blob, this.boardMeta());
     } else {
@@ -11299,9 +12109,11 @@ const Camera = {
     TapMeter.active = null; TapMeter.render();
   },
   close(){
+    this.burstEnd();
     this.stopStream();
     $('#modalCamera').classList.remove('on');
     this.anno = null; this.layer = null; this.provisional = false; this.shots = [];
+    this.zoom = 1; this.torchOn = false;
   }
 };
 
@@ -12994,6 +13806,21 @@ const Admin = {
     const folder = this.select(
       [{ key: '', label: '未分類' }].concat(pj.folders.map(f => ({ key: f.id, label: f.name }))),
       d ? (d.folder_id || '') : (pj.folders[0] ? pj.folders[0].id : ''));
+    const disc = this.select(
+      [{ key: '', label: '（指定しない）' }]
+        .concat(Disciplines.list().map(n => ({ key: n, label: n })))
+        .concat([{ key: '__new__', label: '＋ 新しい図種を追加…' }]),
+      d ? (d.discipline || '') : '');
+    disc.addEventListener('change', () => {
+      if (disc.value !== '__new__') return;
+      const v = prompt('新しい図種の名前', '');
+      if (v && v.trim() && Disciplines.add(v.trim())){
+        const opt = document.createElement('option');
+        opt.value = v.trim(); opt.textContent = v.trim();
+        disc.insertBefore(opt, disc.lastChild);
+        disc.value = v.trim();
+      } else disc.value = '';
+    });
     const scale = this.select([100, 50, 200, 30].map(s => ({ key: String(s), label: '1:' + s })),
       String(d ? d.scale : 100));
     const paper = this.select(['A1', 'A0', 'A2', 'A3'].map(s => ({ key: s, label: s })), d ? d.paper_size : 'A1');
@@ -13022,6 +13849,7 @@ const Admin = {
     const body = [
       this.field('図面名', name),
       el('div', { class: 'adm-row' }, [this.field('図面番号', number), this.field('フォルダ', folder)]),
+      this.field('図種', disc, '意匠図・構造図などの分類。現場アプリの図面一覧で絞り込みに使えます'),
       el('div', { class: 'adm-row' }, [this.field('縮尺', scale), this.field('用紙', paper)]),
       this.field('図面ファイル', el('div', {}, [pick, el('div', { style: 'height:6px' }), preview]),
         'PDFは複数ページのまま取り込みます。ページごとに書き込みでき、拡大に合わせて描き直します。'),
@@ -13034,13 +13862,16 @@ const Admin = {
         if (isNew){
           Drawings.create(pj.id, {
             name: name.value.trim(), number: number.value, folder_id: folder.value || null,
+            discipline: disc.value === '__new__' ? '' : disc.value,
             scale: Number(scale.value), paper_size: paper.value, image_uri: imageUri, pdf: pdfFile,
             published: published.checked
           });
           toast('図面を追加しました' + (pdfFile ? '（' + pdfFile.pages.length + 'ページ）' : ''));
         } else {
           Drawings.update(pj.id, d.id, { name: name.value.trim(), number: number.value,
-            folder_id: folder.value || null, scale: Number(scale.value), paper_size: paper.value,
+            folder_id: folder.value || null,
+            discipline: disc.value === '__new__' ? (d.discipline || '') : disc.value,
+            scale: Number(scale.value), paper_size: paper.value,
             image_uri: imageUri, pdf: pdfFile, published: published.checked });
           toast('保存しました');
           if (Viewer.drawing === d) Viewer.open(d.id);
@@ -14108,6 +14939,34 @@ const Admin = {
       b.appendChild(this.sec('端末間の同期', [], [pad]));
     }
 
+    /* ---- 図種の管理（追加・削除。図面側の値は消さない） ---- */
+    {
+      const pad = el('div', { class: 'pad' });
+      const lst = el('div');
+      Disciplines.list().forEach(n => {
+        const used = Disciplines.countUsing(n);
+        lst.appendChild(el('div', { class: 'kv' }, [
+          el('span', { text: n + (used ? '（使用中 ' + used + '枚）' : '') }),
+          this.btn('削除', () => {
+            if (used && !confirm('「' + n + '」は ' + used + ' 枚の図面で使われています。リストから削除しますか？（図面側の設定は残ります）')) return;
+            Disciplines.remove(n); this.render();
+          }, 'sm')
+        ]));
+      });
+      pad.appendChild(lst);
+      const inp = this.input('', { placeholder: '例）外構図・仮設計画図' });
+      pad.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:10px;align-items:flex-end' }, [
+        el('div', { style: 'flex:1' }, [this.field('新しい図種', inp)]),
+        this.btn('追加', () => {
+          if (!inp.value.trim()) return toast('図種の名前を入れてください');
+          Disciplines.add(inp.value.trim()); this.render();
+        }, 'pri')
+      ]));
+      pad.appendChild(el('div', { class: 'muted', style: 'font-size:12px;margin-top:8px',
+        text: '図種は図面の分類で、フォルダとは独立しています。現場アプリの図面一覧で絞り込みに使えます。' }));
+      b.appendChild(this.sec('図種の管理', [], [pad]));
+    }
+
     const name = this.input(State.org.name);
     b.appendChild(this.sec('会社情報', [], [
       el('div', { class: 'pad' }, [
@@ -14124,7 +14983,7 @@ const Admin = {
     b.appendChild(this.sec('既定値', [], [
       el('div', { class: 'pad' }, [
         el('div', { class: 'kv2' }, [
-          el('span', { text: '新規現場の初期フォルダ' }), el('b', { text: '意匠図 / 構造図 / 設備図' }),
+          el('span', { text: '新規現場の初期フォルダ' }), el('b', { text: 'なし（現場アプリ・コンソールから任意作成）' }),
           el('span', { text: '指摘の既定期限' }), el('b', { text: '3日後' }),
           el('span', { text: '図面の既定縮尺・用紙' }), el('b', { text: '1:100 / A1' }),
           el('span', { text: '常時表示ツール数' }), el('b', { text: '5（設計上の上限）' }),
@@ -15207,11 +16066,16 @@ function wire(){
       case 'merge-exec': Layers.execMerge(); break;
       case 'pin-save': PinSheet.save(); break;
       case 'pin-delete': PinSheet.del(); break;
-      case 'cam-shoot': Camera.shoot(); break;
+      case 'cam-shoot': if (!Camera._burstFired) Camera.shoot(); Camera._burstFired = false; break;
       case 'cam-done': Camera.done(); break;
       case 'cam-cancel': Camera.cancel(); break;
       case 'cam-pick': Camera.pick(); break;
       case 'cam-bb': Camera.toggleBB(); break;
+      case 'layer-add': Layers.addPersonal(); break;
+      case 'cam-flip': Camera.flip(); break;
+      case 'cam-torch': Camera.toggleTorch(); break;
+      case 'cam-zoom': Camera.zoomCycle(); break;
+      case 'cam-burst': Camera.toggleBurst(); break;
       case 'cam-work': Camera.askWork(); break;
       case 'rep-close': Report.close(); break;
       case 'rep-export': Report.out('xlsx'); break;
@@ -15398,6 +16262,20 @@ async function boot(){
   /* 外部ファイルが無くてもPDFを試せるよう、書類1件に確認用PDFを添付する */
   setTimeout(() => SamplePdf.install().then(done => { if (done && typeof DocList !== 'undefined') DocList.render(); }), 300);
   /* 管理者が docs/ に置いた配布データ（seed.json）。起動を待たせず裏で確認する */
+  /* 連写モード：シャッター押しっぱなしで連続撮影（クリックとは別系統） */
+  const shutterBtn = document.querySelector('[data-act="cam-shoot"]');
+  if (shutterBtn){
+    shutterBtn.addEventListener('pointerdown', () => {
+      if (Camera.burst){
+        Camera._burstFired = true;
+        Camera.shoot();
+        Camera.burstStart();
+      }
+    });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel'])
+      shutterBtn.addEventListener(ev, () => Camera.burstEnd());
+  }
+
   setTimeout(() => SeedIO.checkAndApply().catch(e => Dev.log('配布データの確認に失敗: ' + e.message)), 600);
   /* 端末間同期：前回有効にしていたら自動で再開（サインインは必要時にポップアップ） */
   if (location.protocol.startsWith('http') && CloudSync.enabled()){
@@ -15416,7 +16294,7 @@ window.__app = {
   duplicateAsNewObject, statusLabel,
   /* 管理・権限・横断機能 */
   Perm, PERMS, ROLE_PERMS, Audit, Admin, Projects, Folders, Drawings, Members, Vendors,
-  Search, Alerts, MissingShot, DataIO, DriveSync, SeedIO, CloudSync, DriveStore, reportFileName, SCHEMA_VERSION,
+  Search, Alerts, MissingShot, DataIO, DriveSync, SeedIO, CloudSync, DriveStore, reportFileName, Disciplines, ReportBundle, paginatePhotos, SCHEMA_VERSION,
   migrateForTest: migrate, fmtLen, ICON_PX, Sheets, icon, decorateIcons, refreshAlertBadge,
   confirmSheet, pickImageFile, pickDrawingFile, Share, SHARE_EXPIRY, Layout, Guide, Contrast,
   /* PDF（複数ページ） */

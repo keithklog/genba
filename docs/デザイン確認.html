@@ -127,6 +127,7 @@
   --toolbar-h:82px;
   --tabbar-h:72px;
   --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-r:env(safe-area-inset-right,0px);
 
   /* §5-2 レイヤー8色パレット（彩度を揃え、隣り合っても混ざらない並び） */
   --lp0:#1668E3; --lp1:#E8590C; --lp2:#1A8245; --lp3:#C2255C;
@@ -480,6 +481,34 @@ b,strong{font-weight:600}
 }
 .tool.marquee .badge-dot{display:block}
 
+/* ---- スマホ横向き（図面を広く・ツールバーは右サイドへ）---- */
+@media (orientation:landscape) and (max-height:560px){
+  #s3.screen.on{
+    display:grid;
+    grid-template-areas:"hdr hdr" "vp tb";
+    grid-template-rows:auto 1fr;
+    grid-template-columns:1fr calc(var(--toolbar-h) + var(--safe-r));
+  }
+  #s3 > .hdr{grid-area:hdr;min-height:48px}
+  #s3 > #viewport{grid-area:vp}
+  #s3 > #toolbar{
+    grid-area:tb;flex-direction:column;height:auto;width:100%;
+    padding-bottom:0;padding-right:var(--safe-r);
+  }
+  #s3 > #toolbar::before{left:0;right:auto;top:0;bottom:0;width:1px;height:auto}
+  #s3 #toolbar .tool{flex:1;min-height:44px;min-width:0;gap:3px}
+  #s3 #toolbar .tool .lb{font-size:10px}
+  #s3 #toolbar .tbsep{width:auto;height:1px;margin:2px 14px}
+  #s3 #toolbar .tool.act{flex:0 0 56px}
+  #s3 #toolbar .tool.sel::before{
+    left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:34px;border-radius:0 3px 3px 0;
+  }
+  /* パレットとシートはビューポート内に収まる（右のツールバーを避ける） */
+  #s3 .palette{bottom:10px}
+  #s3 .sheet{max-height:96%}
+}
+
 /* ---- パレット（ペン/図形の長押し・再タップ）---- */
 .palette{
   position:absolute;left:10px;right:10px;bottom:calc(var(--toolbar-h) + var(--safe-b) + 10px);
@@ -664,6 +693,16 @@ b,strong{font-weight:600}
    =================================================================== */
 #camStage{flex:1;background:#000;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
 #camStage video,#camStage .fake{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#camStage video{transform-origin:center center}
+/* 撮影コントロール（ズーム・フラッシュ・切替・連写）。右手の親指が届く位置 */
+.camctl{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;z-index:5}
+.camctl .cbtn{
+  width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,.30);
+  background:rgba(0,0,0,.42);color:#fff;font-size:17px;font-weight:700;line-height:1;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.camctl .cbtn.on{background:var(--accent);border-color:var(--accent)}
+.camctl .cbtn:disabled{opacity:.35}
 .camfoot{
   flex:0 0 auto;background:#000;padding:16px 20px calc(20px + var(--safe-b));
   display:flex;align-items:center;justify-content:space-between;
@@ -726,6 +765,36 @@ b,strong{font-weight:600}
 .rp-meta{font-size:10px;color:#5A6673;margin-top:3px}
 .rp-grp{font-size:12px;font-weight:700;color:#0F4FAE;margin-bottom:7px}
 .rp-grid{display:grid;grid-template-columns:1fr;gap:8px}
+/* ---- 帳票の組み立て（コンテンツ見出し・横型セル・D&D） ---- */
+.rep-sec{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+  margin:14px 8px 6px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;
+}
+.rep-sec-t{display:flex;align-items:baseline;gap:8px}
+.rep-sec-c{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rep-sec-c .btn.dan{color:#B3261E}
+.rp-cell.h{display:grid;grid-template-columns:46% 1fr;gap:0 12px;align-items:start}
+.rp-cell.h img{grid-row:1 / span 2;width:100%;height:100%;max-height:220px;object-fit:contain;background:#F4F6F8}
+.rp-cell.h .rp-kvs{min-width:0}
+.rp-cell.h .rp-act{grid-column:2}
+.rp-cell img{cursor:grab}
+.rp-cell.dragsrc{opacity:.35}
+.rp-cell.drophint{outline:3px solid var(--accent);outline-offset:2px;border-radius:8px}
+.rp-ghost{
+  position:fixed;z-index:999;pointer-events:none;transform:translate(-50%,-55%);
+  width:130px;max-height:100px;object-fit:cover;border-radius:10px;
+  box-shadow:0 10px 30px rgba(16,24,40,.4);opacity:.9;
+}
+.rp-cover{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;min-height:420px}
+.rp-cover .cv-t{font-size:26px;font-weight:800;letter-spacing:.08em}
+.rp-cover .cv-tbl{width:78%}
+.rp-layout-ph{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  min-height:200px;border:2px dashed var(--line-ctl);border-radius:12px;margin:10px;
+  color:var(--fg-2);text-align:center;padding:14px;
+}
+
 .rp-cell{border:1px solid #98A3AF;padding:7px;font-size:11px;position:relative;background:#fff;color:#151A20}
 .rp-cell img{width:100%;height:150px;object-fit:contain;background:#F2F4F7;display:block}
 .rp-kv{display:flex;border-top:1px solid #E3E7EC;padding:3px 0;font-size:10.5px}
@@ -862,7 +931,9 @@ table.dame tr:nth-child(even) td{background:#F7F9FA}
 
 /* ---- 複数ページPDFのページ送り ---- */
 .pdfbar{
-  position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:58;
+  /* z-index はシート（40）より下。指摘一覧などのメニューを開いたとき、
+     ページ切替がメニューの上に浮かぶ、という苦情への対処 */
+  position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:34;
   display:flex;align-items:center;gap:2px;background:rgba(29,36,44,.94);color:#fff;
   border:1px solid rgba(255,255,255,.10);border-radius:var(--r-full);padding:5px;
   box-shadow:var(--sh-dark);
