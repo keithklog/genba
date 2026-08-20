@@ -1120,6 +1120,14 @@ table.dame tr:nth-child(even) td{background:#F7F9FA}
 }
 .rep-addpop button:last-child{border-bottom:0}
 .rep-addpop button:active{background:var(--canvas)}
+
+/* 定型フレーズ（対訳辞書v1）：カテゴリ見出し＋チップ。長文なので折返し可 */
+.phrasebox{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:12px;
+  padding:10px 12px;margin:8px 0;background:var(--canvas)}
+.ph-cat{font-size:11.5px;font-weight:700;color:var(--fg-2);margin:8px 0 4px}
+.ph-chip{display:block;width:100%;text-align:left;white-space:normal;line-height:1.6;
+  margin:0 0 6px;padding:9px 12px;border-radius:10px}
+.ph-chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 /* ===================================================================
    PC 管理コンソール
    ---------------------------------------------------------------
